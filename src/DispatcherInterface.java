@@ -1,14 +1,6 @@
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
-import java.awt.event.ActionEvent;
+import java.awt.GridLayout;
 import java.util.List;
 import java.util.Scanner;
-import java.util.concurrent.atomic.AtomicInteger;
-import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
@@ -21,37 +13,80 @@ import javax.swing.SwingUtilities;
 
 public class DispatcherInterface {
 
-    private static final AtomicInteger ARRIVAL_COUNTER = new AtomicInteger();
+    private static int arrivalCounter = 0;
 
     private DispatcherInterface() {
     }
 
     public static void runConsole(TrafficController controller, Scanner scanner) {
         System.out.println("\n====== VEGAMTRAFFIC DISPATCHER ======");
-        String vehicleType = readChoice(scanner, "Choose vehicle type:",
-                DispatcherRequestFactory.AMBULANCE,
-                DispatcherRequestFactory.FIRE_TRUCK,
-                DispatcherRequestFactory.POLICE);
+
+        String vehicleType = readVehicleType(scanner);
         List<String> situations = DispatcherRequestFactory.getSituations(vehicleType);
-        String situation = readChoice(scanner, "Choose situation:",
-                situations.toArray(new String[0]));
+        String situation = readChoice(scanner, "Choose situation:", situations);
         String source = readJunction(scanner, controller, "Enter origin junction: ");
         String destination = readJunction(scanner, controller, "Enter destination junction: ");
         System.out.print("Enter incident description: ");
-        String description = scanner.nextLine().trim();
+        String description = scanner.nextLine();
 
         try {
-            RoutingRequest request = createRequest(
-                    controller, vehicleType, situation, source, destination, description);
-            EmergencyVehicle vehicle = DispatcherRequestFactory.findVehicle(
-                    controller, vehicleType);
-            controller.setVehiclePosition(vehicle.getVehicleId(), source);
-            if (controller.addRoutingRequest(request)) {
-                System.out.println("\nDispatcher created RoutingRequest:");
-                System.out.println(request);
-            }
+            addRequest(controller, vehicleType, situation, source, destination, description);
         } catch (IllegalArgumentException exception) {
             System.out.println("Could not create routing request: " + exception.getMessage());
+        }
+    }
+
+    private static String readVehicleType(Scanner scanner) {
+        System.out.println("Choose vehicle type:");
+        System.out.println("1. AMBULANCE");
+        System.out.println("2. FIRE_TRUCK");
+        System.out.println("3. POLICE");
+
+        int choice = readNumber(scanner, "Enter choice: ", 1, 3);
+        switch (choice) {
+            case 1:
+                return DispatcherRequestFactory.AMBULANCE;
+            case 2:
+                return DispatcherRequestFactory.FIRE_TRUCK;
+            default:
+                return DispatcherRequestFactory.POLICE;
+        }
+    }
+
+    private static String readChoice(Scanner scanner, String prompt, List<String> choices) {
+        System.out.println(prompt);
+        for (int i = 0; i < choices.size(); i++) {
+            System.out.println((i + 1) + ". " + choices.get(i));
+        }
+        int choice = readNumber(scanner, "Enter choice: ", 1, choices.size());
+        return choices.get(choice - 1);
+    }
+
+    private static int readNumber(Scanner scanner, String prompt, int minimum, int maximum) {
+        while (true) {
+            System.out.print(prompt);
+            try {
+                int choice = Integer.parseInt(scanner.nextLine());
+                if (choice >= minimum && choice <= maximum) {
+                    return choice;
+                }
+            } catch (NumberFormatException exception) {
+                // Ask again when the input is not a valid number.
+            }
+            System.out.println("Enter a number from " + minimum + " to " + maximum + ".");
+        }
+    }
+
+    private static String readJunction(Scanner scanner, TrafficController controller,
+                                       String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            String junction = scanner.nextLine().trim().toUpperCase();
+            if (controller.getRoadNetwork().hasJunction(junction)) {
+                return junction;
+            }
+            System.out.println("Junction not found. Choose from: "
+                    + controller.getRoadNetwork().getJunctions());
         }
     }
 
@@ -65,33 +100,31 @@ public class DispatcherInterface {
                                                String source,
                                                String destination,
                                                String description) {
-        int arrivalOrder = ARRIVAL_COUNTER.incrementAndGet();
-        String requestId = "DISP-REQ-" + arrivalOrder;
+        arrivalCounter++;
+        String requestId = "DISP-REQ-" + arrivalCounter;
         return DispatcherRequestFactory.createRequest(controller, requestId,
-                arrivalOrder, vehicleType, situation, source, destination, description);
+                arrivalCounter, vehicleType, situation, source, destination, description);
+    }
+
+    private static void addRequest(TrafficController controller, String vehicleType,
+                                   String situation, String source, String destination,
+                                   String description) {
+        RoutingRequest request = createRequest(controller, vehicleType, situation,
+                source, destination, description);
+        EmergencyVehicle vehicle = DispatcherRequestFactory.findVehicle(
+                controller, vehicleType);
+        controller.setVehiclePosition(vehicle.getVehicleId(), source);
+        if (controller.addRoutingRequest(request)) {
+            System.out.println("\nDispatcher created RoutingRequest:");
+            System.out.println(request);
+        } else {
+            throw new IllegalArgumentException("The traffic controller rejected the request.");
+        }
     }
 
     private static void createWindow(TrafficController controller) {
-        JFrame frame = new JFrame("VegamTraffic | Emergency Dispatcher");
+        JFrame frame = new JFrame("VegamTraffic Dispatcher");
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        frame.setMinimumSize(new Dimension(650, 570));
-
-        JPanel content = new JPanel(new GridBagLayout());
-        content.setBorder(BorderFactory.createEmptyBorder(26, 34, 26, 34));
-        content.setBackground(new Color(246, 248, 249));
-        GridBagConstraints constraints = new GridBagConstraints();
-        constraints.insets = new Insets(7, 6, 7, 6);
-        constraints.fill = GridBagConstraints.HORIZONTAL;
-        constraints.weightx = 1;
-
-        JLabel title = new JLabel("VEGAMTRAFFIC DISPATCHER");
-        title.setFont(new Font("SansSerif", Font.BOLD, 20));
-        title.setForeground(new Color(20, 55, 70));
-        addRow(content, constraints, 0, title, 2);
-
-        JLabel subtitle = new JLabel("Create a prioritized emergency routing request");
-        subtitle.setForeground(new Color(100, 119, 130));
-        addRow(content, constraints, 1, subtitle, 2);
 
         JComboBox<String> vehicleTypes = new JComboBox<>(new String[] {
                 DispatcherRequestFactory.AMBULANCE,
@@ -103,162 +136,86 @@ public class DispatcherInterface {
                 controller.getRoadNetwork().getJunctions().toArray(new String[0]));
         JComboBox<String> destinations = new JComboBox<>(
                 controller.getRoadNetwork().getJunctions().toArray(new String[0]));
-        JLabel severityValue = new JLabel();
-        severityValue.setFont(new Font("SansSerif", Font.BOLD, 14));
-        JTextArea description = new JTextArea(4, 25);
-        description.setLineWrap(true);
-        description.setWrapStyleWord(true);
-        description.setBorder(BorderFactory.createEmptyBorder(7, 8, 7, 8));
-
-        addLabeledRow(content, constraints, 2, "Vehicle type", vehicleTypes);
-        addLabeledRow(content, constraints, 3, "Situation", situations);
-        addLabeledRow(content, constraints, 4, "Automatic severity", severityValue);
-        addLabeledRow(content, constraints, 5, "Origin junction", origins);
-        addLabeledRow(content, constraints, 6, "Destination junction", destinations);
-        addLabeledRow(content, constraints, 7, "Incident description",
-                new JScrollPane(description));
-
+        JLabel severity = new JLabel();
         JLabel assignedVehicle = new JLabel();
-        assignedVehicle.setForeground(new Color(90, 108, 119));
-        addRow(content, constraints, 8, assignedVehicle, 2);
-
+        JTextArea description = new JTextArea(3, 20);
         JButton submit = new JButton("Create routing request");
-        submit.setBackground(new Color(22, 142, 109));
-        submit.setForeground(Color.WHITE);
-        submit.setFocusPainted(false);
-        addRow(content, constraints, 9, submit, 2);
 
-        vehicleTypes.addActionListener((ActionEvent event) ->
-                updateSituations((String) vehicleTypes.getSelectedItem(),
-                        situations, severityValue, assignedVehicle, origins, controller));
-        situations.addActionListener((ActionEvent event) ->
-                updateSeverity((String) vehicleTypes.getSelectedItem(),
-                        (String) situations.getSelectedItem(), severityValue));
-        submit.addActionListener((ActionEvent event) -> {
-            String vehicleType = (String) vehicleTypes.getSelectedItem();
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        addField(form, "Vehicle type", vehicleTypes);
+        addField(form, "Situation", situations);
+        addField(form, "Priority", severity);
+        addField(form, "Origin junction", origins);
+        addField(form, "Destination junction", destinations);
+        addField(form, "Description", new JScrollPane(description));
+        form.add(new JLabel("Assigned vehicle"));
+        form.add(assignedVehicle);
+        form.add(new JLabel());
+        form.add(submit);
+
+        vehicleTypes.addActionListener(event -> {
+            String type = (String) vehicleTypes.getSelectedItem();
+            updateForm(controller, type, situations, severity, assignedVehicle, origins);
+        });
+
+        situations.addActionListener(event -> {
+            String type = (String) vehicleTypes.getSelectedItem();
             String situation = (String) situations.getSelectedItem();
-            String source = (String) origins.getSelectedItem();
-            String destination = (String) destinations.getSelectedItem();
-            try {
-                RoutingRequest request = createRequest(controller, vehicleType,
-                        situation, source, destination, description.getText());
-                EmergencyVehicle vehicle = DispatcherRequestFactory.findVehicle(
-                        controller, vehicleType);
-                controller.setVehiclePosition(vehicle.getVehicleId(), source);
-                if (controller.addRoutingRequest(request)) {
-                    JOptionPane.showMessageDialog(frame,
-                            "Routing request added:\n" + request,
-                            "Request created", JOptionPane.INFORMATION_MESSAGE);
-                    description.setText("");
-                } else {
-                    JOptionPane.showMessageDialog(frame,
-                            "The traffic controller rejected the request.",
-                            "Request not added", JOptionPane.ERROR_MESSAGE);
-                }
-            } catch (IllegalArgumentException exception) {
-                JOptionPane.showMessageDialog(frame, exception.getMessage(),
-                        "Check dispatcher details", JOptionPane.WARNING_MESSAGE);
+            if (situation != null) {
+                severity.setText(DispatcherRequestFactory.getSeverity(type, situation));
             }
         });
 
-        updateSituations((String) vehicleTypes.getSelectedItem(),
-                situations, severityValue, assignedVehicle, origins, controller);
+        submit.addActionListener(event -> {
+            try {
+                addRequest(controller, (String) vehicleTypes.getSelectedItem(),
+                        (String) situations.getSelectedItem(),
+                        (String) origins.getSelectedItem(),
+                        (String) destinations.getSelectedItem(),
+                        description.getText());
+                JOptionPane.showMessageDialog(frame, "Routing request added.");
+                description.setText("");
+            } catch (IllegalArgumentException exception) {
+                JOptionPane.showMessageDialog(frame, exception.getMessage(),
+                        "Request not added", JOptionPane.WARNING_MESSAGE);
+            }
+        });
 
-        frame.setContentPane(content);
+        frame.setContentPane(form);
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+        updateForm(controller, (String) vehicleTypes.getSelectedItem(),
+                situations, severity, assignedVehicle, origins);
     }
 
-    private static void updateSituations(String vehicleType,
-                                         JComboBox<String> situations,
-                                         JLabel severityValue,
-                                         JLabel assignedVehicle,
-                                         JComboBox<String> origins,
-                                         TrafficController controller) {
-        situations.removeAllItems();
-        for (String situation : DispatcherRequestFactory.getSituations(vehicleType)) {
-            situations.addItem(situation);
-        }
-        updateSeverity(vehicleType, (String) situations.getSelectedItem(), severityValue);
+    private static void addField(JPanel panel, String label, java.awt.Component field) {
+        panel.add(new JLabel(label));
+        panel.add(field);
+    }
+
+    private static void updateVehicle(TrafficController controller, String vehicleType,
+                                      JLabel assignedVehicle, JComboBox<String> origins) {
         EmergencyVehicle vehicle = DispatcherRequestFactory.findVehicle(
                 controller, vehicleType);
         if (vehicle == null) {
-            assignedVehicle.setText("No available vehicle of this type is registered.");
+            assignedVehicle.setText("None available");
         } else {
-            assignedVehicle.setText("Assigned unit: " + vehicle.getVehicleId()
-                    + " · Current location: " + vehicle.getCurrentJunction());
+            assignedVehicle.setText(vehicle.getVehicleId()
+                    + " at " + vehicle.getCurrentJunction());
             origins.setSelectedItem(vehicle.getCurrentJunction());
         }
     }
 
-    private static void updateSeverity(String vehicleType, String situation,
-                                       JLabel severityValue) {
-        if (vehicleType != null && situation != null) {
-            severityValue.setText(DispatcherRequestFactory.getSeverity(
-                    vehicleType, situation).toUpperCase());
+    private static void updateForm(TrafficController controller, String vehicleType,
+                                  JComboBox<String> situations, JLabel severity,
+                                  JLabel assignedVehicle, JComboBox<String> origins) {
+        situations.removeAllItems();
+        for (String situation : DispatcherRequestFactory.getSituations(vehicleType)) {
+            situations.addItem(situation);
         }
-    }
-
-    private static void addLabeledRow(JPanel panel, GridBagConstraints constraints,
-                                      int row, String label, java.awt.Component field) {
-        JLabel caption = new JLabel(label);
-        caption.setForeground(new Color(64, 82, 94));
-        constraints.gridx = 0;
-        constraints.gridy = row;
-        constraints.weightx = 0.35;
-        panel.add(caption, constraints);
-        constraints.gridx = 1;
-        constraints.weightx = 0.65;
-        panel.add(field, constraints);
-    }
-
-    private static void addRow(JPanel panel, GridBagConstraints constraints,
-                               int row, java.awt.Component component, int span) {
-        constraints.gridx = 0;
-        constraints.gridy = row;
-        constraints.gridwidth = span;
-        constraints.weightx = 1;
-        panel.add(component, constraints);
-        constraints.gridwidth = 1;
-    }
-
-    private static String readChoice(Scanner scanner, String prompt,
-                                     String... choices) {
-        while (true) {
-            System.out.println(prompt);
-            for (int i = 0; i < choices.length; i++) {
-                System.out.println((i + 1) + ". " + choices[i]);
-            }
-            System.out.print("Enter choice: ");
-            String value = scanner.nextLine().trim();
-            try {
-                int index = Integer.parseInt(value) - 1;
-                if (index >= 0 && index < choices.length) {
-                    return choices[index];
-                }
-            } catch (NumberFormatException exception) {
-                for (String choice : choices) {
-                    if (choice.equalsIgnoreCase(value)) {
-                        return choice;
-                    }
-                }
-            }
-            System.out.println("Invalid choice. Please try again.");
-        }
-    }
-
-    private static String readJunction(Scanner scanner,
-                                       TrafficController controller,
-                                       String prompt) {
-        while (true) {
-            System.out.print(prompt);
-            String junction = scanner.nextLine().trim().toUpperCase();
-            if (controller.getRoadNetwork().hasJunction(junction)) {
-                return junction;
-            }
-            System.out.println("Junction not found. Choose from: "
-                    + controller.getRoadNetwork().getJunctions());
-        }
+        severity.setText(DispatcherRequestFactory.getSeverity(vehicleType,
+                (String) situations.getSelectedItem()));
+        updateVehicle(controller, vehicleType, assignedVehicle, origins);
     }
 }

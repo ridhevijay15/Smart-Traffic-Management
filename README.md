@@ -45,6 +45,8 @@ java -cp out Main --dispatcher-gui
 ```
 
 The console and Swing dispatchers use the same situation-to-severity mappings.
+The console version uses numbered prompts, and the Swing window uses a simple
+form with dropdowns.
 Each request is assigned to a matching registered vehicle (the first available
 unit of that type), and its chosen origin updates that unit's simulated position.
 
