@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VegamTraffic | Emergency Vehicles</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <a class="brand" href="/"><span class="brand-mark">V</span>
+            <span>Vegam<span class="brand-light">Traffic</span><small>VEGAM CITY CONTROL</small></span>
+        </a>
+        <p class="nav-label">CONTROL ROOM</p>
+        <a class="nav-item" href="/"><span>▦</span> Dashboard</a>
+        <a class="nav-item" href="/dispatcher"><span>↗</span> Dispatcher</a>
+        <a class="nav-item" href="/roads"><span>⌁</span> Roads &amp; events</a>
+        <a class="nav-item active" href="/vehicles"><span>◉</span> Vehicles</a>
+    </aside>
+    <main class="main-content">
+        <header class="topbar">
+            <div class="breadcrumb"><a href="/">Vegam City</a> <span>/</span> Vehicles</div>
+        </header>
+        <section class="page-heading">
+            <div><p class="eyebrow">EMERGENCY RESPONSE FLEET</p><h1>Emergency vehicles</h1>
+                <p class="subtitle">Review current unit positions or update a vehicle's simulated origin.</p></div>
+            <div class="city-chip"><span>◉</span> {{VEHICLE_COUNT}} UNITS <i>●</i></div>
+        </section>
+        {{NOTICE}}
+        <section class="panel vehicles-directory">
+            <div class="panel-heading">
+                <div><p class="eyebrow">FLEET STATUS</p><h2>Registered units</h2></div>
+                <span class="panel-tag">POSITIONS UPDATE AFTER ROUTING</span>
+            </div>
+            <div class="vehicle-grid">{{VEHICLE_LIST}}</div>
+        </section>
+        <section class="panel position-panel">
+            <div class="panel-heading">
+                <div><p class="eyebrow">SIMULATION CONTROLS</p><h2>Update vehicle position</h2></div>
+                <span class="heading-icon">⌖</span>
+            </div>
+            <p class="subtitle">Set a unit's current junction before creating a route request.</p>
+            <form method="post" action="/vehicles/position" class="position-edit-form">
+                <div><label for="position-vehicle">Emergency vehicle</label>
+                    <select id="position-vehicle" name="vehicleId" required>{{VEHICLE_OPTIONS}}</select></div>
+                <div><label for="position-junction">Current junction</label>
+                    <select id="position-junction" name="junction" required>{{JUNCTION_OPTIONS}}</select></div>
+                <button class="button button-primary" type="submit">Save vehicle position</button>
+            </form>
+        </section>
+        <footer>VegamTraffic <span>·</span> Positions use the simulation's junction identifiers.</footer>
+    </main>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VegamTraffic | Roads and Events</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <a class="brand" href="/"><span class="brand-mark">V</span>
+            <span>Vegam<span class="brand-light">Traffic</span><small>VEGAM CITY CONTROL</small></span>
+        </a>
+        <p class="nav-label">CONTROL ROOM</p>
+        <a class="nav-item" href="/"><span>▦</span> Dashboard</a>
+        <a class="nav-item" href="/dispatcher"><span>↗</span> Dispatcher</a>
+        <a class="nav-item active" href="/roads"><span>⌁</span> Roads &amp; events</a>
+        <a class="nav-item" href="/vehicles"><span>◉</span> Vehicles</a>
+    </aside>
+    <main class="main-content">
+        <header class="topbar">
+            <div class="breadcrumb"><a href="/">Vegam City</a> <span>/</span> Roads &amp; events</div>
+        </header>
+        <section class="page-heading">
+            <div><p class="eyebrow">DIRECTED ROAD NETWORK</p><h1>Roads &amp; traffic events</h1>
+                <p class="subtitle">Inspect travel times and apply road updates in the order they arrive.</p></div>
+            <div class="city-chip"><span>⌁</span> {{OPEN_ROAD_COUNT}} OPEN ROADS <i>●</i></div>
+        </section>
+        {{NOTICE}}
+        <section class="roads-layout">
+            <article class="panel roads-table-panel">
+                <div class="panel-heading">
+                    <div><p class="eyebrow">NETWORK STATUS</p><h2>All road segments</h2></div>
+                    <span class="panel-tag">10 JUNCTIONS · 20 DIRECTED ROADS</span>
+                </div>
+                <div class="road-list full-list">{{ROAD_LIST}}</div>
+                <div class="panel-foot"><span class="legend-dot open"></span> Open
+                    <span class="legend-dot closed"></span> Closed
+                    <span class="foot-note">Travel times in minutes</span></div>
+            </article>
+            <article class="panel form-panel event-form-panel">
+                <div class="panel-heading">
+                    <div><p class="eyebrow">FIFO EVENT QUEUE</p><h2>Report a road event</h2></div>
+                    <span class="heading-icon orange">⌁</span>
+                </div>
+                <form method="post" action="/events/add">
+                    <label for="event-type">Event type</label>
+                    <select id="event-type" name="type">
+                        <option value="congestion">Congestion update</option>
+                        <option value="closure">Road closure</option>
+                    </select>
+                    <label for="road-select">Road segment</label>
+                    <select id="road-select" name="roadId" required>{{ROAD_OPTIONS}}</select>
+                    <label for="travel-time">New travel time (minutes)</label>
+                    <input id="travel-time" name="travelTime" type="number" min="1" value="12">
+                    <button class="button button-primary" type="submit">Add event to queue <span>+</span></button>
+                </form>
+                <div class="event-queue-info">
+                    <span class="priority-badge high">{{PENDING_EVENTS}}</span>
+                    <span><strong>Events waiting</strong><small>Applied FIFO before route calculation</small></span>
+                </div>
+                <form method="post" action="/events/process">
+                    <button class="button button-secondary" type="submit">Apply queued traffic events</button>
+                </form>
+            </article>
+        </section>
+        <footer>VegamTraffic <span>·</span> Traffic events are applied in first-in, first-out order.</footer>
+    </main>
+</body>
+</html>

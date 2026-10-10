@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VegamTraffic | Dispatcher</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <a class="brand" href="/"><span class="brand-mark">V</span>
+            <span>Vegam<span class="brand-light">Traffic</span><small>VEGAM CITY CONTROL</small></span>
+        </a>
+        <p class="nav-label">CONTROL ROOM</p>
+        <a class="nav-item" href="/"><span>▦</span> Dashboard</a>
+        <a class="nav-item active" href="/dispatcher"><span>↗</span> Dispatcher</a>
+        <a class="nav-item" href="/roads"><span>⌁</span> Roads &amp; events</a>
+        <a class="nav-item" href="/vehicles"><span>◉</span> Vehicles</a>
+    </aside>
+    <main class="main-content">
+        <header class="topbar">
+            <div class="breadcrumb"><a href="/">Vegam City</a> <span>/</span> Dispatcher</div>
+        </header>
+        <section class="page-heading">
+            <div><p class="eyebrow">EMERGENCY RESPONSE</p><h1>Dispatcher</h1>
+                <p class="subtitle">Create requests from incident details; priority is assigned automatically.</p></div>
+            <div class="city-chip"><span>≋</span> {{QUEUE_COUNT}} QUEUED <i>●</i></div>
+        </section>
+        {{NOTICE}}
+        <section class="dispatcher-layout">
+            <article class="panel form-panel dispatcher-form-panel">
+                <div class="panel-heading">
+                    <div><p class="eyebrow">NEW ROUTING REQUEST</p><h2>Incident details</h2></div>
+                    <span class="heading-icon">↗</span>
+                </div>
+                <form method="post" action="/routes/type" class="type-form">
+                    <label for="dispatcher-vehicle-type">Emergency vehicle type</label>
+                    <div class="inline-fields">
+                        <select id="dispatcher-vehicle-type" name="vehicleType" required>
+                            {{DISPATCHER_VEHICLE_OPTIONS}}
+                        </select>
+                        <button class="button button-secondary" type="submit">Load situations</button>
+                    </div>
+                </form>
+                <p class="helper-text">Load the situations for the selected vehicle before creating a request.</p>
+                {{ASSIGNED_UNIT}}
+                <form method="post" action="/routes/add">
+                    <input type="hidden" name="vehicleType" value="{{SELECTED_VEHICLE_TYPE}}">
+                    <label for="situation-select">Incident situation and priority</label>
+                    <select id="situation-select" name="situation" required>
+                        {{DISPATCHER_SITUATION_OPTIONS}}
+                    </select>
+                    <div class="inline-fields">
+                        <div><label for="source-select">Origin junction</label>
+                            <select id="source-select" name="source" required>{{JUNCTION_OPTIONS}}</select>
+                        </div>
+                        <div><label for="destination-select">Destination junction</label>
+                            <select id="destination-select" name="destination" required>{{JUNCTION_OPTIONS}}</select>
+                        </div>
+                    </div>
+                    <label for="incident-description">Incident description</label>
+                    <textarea id="incident-description" name="description" rows="4"
+                              placeholder="Describe the emergency..." required></textarea>
+                    <button class="button button-primary" type="submit">Add routing request <span>→</span></button>
+                </form>
+            </article>
+            <aside class="dispatcher-side">
+                <article class="panel priority-panel">
+                    <p class="eyebrow">PROCESSING ORDER</p>
+                    <h2>Priority queue</h2>
+                    <ol class="priority-list">
+                        <li><span class="priority-badge critical">1</span><span><strong>CRITICAL</strong><small>Immediate response situations</small></span></li>
+                        <li><span class="priority-badge high">2</span><span><strong>HIGH</strong><small>Urgent response situations</small></span></li>
+                        <li><span class="priority-badge normal">3</span><span><strong>NORMAL</strong><small>Routine situations</small></span></li>
+                    </ol>
+                    <p class="helper-text">Within the same priority, requests are processed in arrival order.</p>
+                    <form method="post" action="/routes/process">
+                        <button class="button button-dark" type="submit">Process queued requests</button>
+                    </form>
+                </article>
+                <article class="panel queue-summary-panel">
+                    <p class="eyebrow">CURRENT QUEUE</p>
+                    <strong class="queue-number">{{QUEUE_COUNT}}</strong>
+                    <p>{{QUEUE_SUMMARY}}</p>
+                </article>
+            </aside>
+        </section>
+        {{ROUTE_VISUALIZATION}}
+        <footer>VegamTraffic <span>·</span> Request priority comes from selected vehicle type and incident situation.</footer>
+    </main>
+</body>
+</html>
