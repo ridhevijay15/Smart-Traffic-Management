@@ -6,22 +6,37 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Arrays;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 public class TrafficWebServer {
 
+    private static final String CONTROLLER = "CONTROLLER";
+    private static final String VEHICLE = "VEHICLE";
+    private static final int PASSWORD_ITERATIONS = 120000;
+    private static final int PASSWORD_KEY_LENGTH = 256;
+
     private final TrafficController controller;
+    private final Map<String, Account> accounts = new HashMap<>();
+    private final Map<String, UserSession> sessions = new HashMap<>();
+    private final SecureRandom random = new SecureRandom();
     private int requestArrivalOrder;
     private int eventArrivalOrder;
-    private String selectedVehicleType = DispatcherRequestFactory.AMBULANCE;
     private String notice = "";
     private boolean noticeIsError;
     private List<String> noticeDetails = Collections.emptyList();
+    private UserSession activeSession;
 
     private TrafficWebServer(TrafficController controller) {
         this.controller = controller;
@@ -42,19 +57,89 @@ public class TrafficWebServer {
 
         if (path.equals("/styles.css") && method.equals("GET")) {
             serveStyles(exchange);
-        } else if (method.equals("GET")) {
-            String pageFile = getPageFile(path);
-            if (pageFile == null) {
-                sendHtml(exchange, 404, "<h1>Page not found</h1>");
+            return;
+        }
+
+        activeSession = findSession(exchange);
+        if (method.equals("POST") && path.equals("/login")) {
+            login(exchange, readForm(exchange));
+            activeSession = null;
+            return;
+        }
+        if (method.equals("POST") && path.equals("/register")) {
+            register(exchange, readForm(exchange));
+            activeSession = null;
+            return;
+        }
+        if (method.equals("POST") && path.equals("/logout")) {
+            logout(exchange);
+            activeSession = null;
+            return;
+        }
+        if (method.equals("GET") && (path.equals("/login") || path.equals("/register"))) {
+            if (activeSession != null) {
+                redirect(exchange, homeFor(activeSession.account));
             } else {
-                servePage(exchange, pageFile);
+                serveAuthPage(exchange, path.equals("/register")
+                        ? "register.html" : "login.html");
+            }
+            activeSession = null;
+            return;
+        }
+        if (activeSession == null) {
+            redirect(exchange, "/login");
+            return;
+        }
+        if (!isAllowed(activeSession.account, method, path)) {
+            sendHtml(exchange, 403, "<h1>Access denied</h1><p>Your account cannot access this page or action.</p>");
+            activeSession = null;
+            return;
+        }
+
+        if (method.equals("GET")) {
+            if (activeSession.account.role.equals(VEHICLE)) {
+                serveVehicleRequestPage(exchange);
+            } else {
+                String pageFile = getPageFile(path);
+                if (pageFile == null) {
+                    sendHtml(exchange, 404, "<h1>Page not found</h1>");
+                } else {
+                    servePage(exchange, pageFile);
+                }
             }
         } else if (method.equals("POST")) {
             handleForm(exchange, path);
-            servePage(exchange, getActionPage(path));
+            if (activeSession.account.role.equals(VEHICLE)) {
+                serveVehicleRequestPage(exchange);
+            } else {
+                servePage(exchange, getActionPage(path));
+            }
         } else {
             sendHtml(exchange, 404, "<h1>Page not found</h1>");
         }
+        activeSession = null;
+    }
+
+    private boolean isAllowed(Account account, String method, String path) {
+        if (account.role.equals(VEHICLE)) {
+            if (method.equals("GET")) {
+                return path.equals("/") || path.equals("/request") || path.equals("/dispatcher");
+            }
+            return method.equals("POST") && path.equals("/routes/add");
+        }
+        if (account.role.equals(CONTROLLER)) {
+            if (method.equals("GET")) {
+                return path.equals("/") || path.equals("/dashboard")
+                        || path.equals("/dispatcher") || path.equals("/roads")
+                        || path.equals("/vehicles");
+            }
+            return method.equals("POST")
+                    && (path.equals("/routes/process")
+                    || path.equals("/events/add")
+                    || path.equals("/events/status")
+                    || path.equals("/events/process"));
+        }
+        return false;
     }
 
     private String getPageFile(String path) {
@@ -68,6 +153,8 @@ public class TrafficWebServer {
                 return "roads.html";
             case "/vehicles":
                 return "vehicles.html";
+            case "/request":
+                return "vehicle_request.html";
             default:
                 return null;
         }
@@ -91,7 +178,11 @@ public class TrafficWebServer {
         if (path.equals("/routes/type")) {
             selectVehicleType(form);
         } else if (path.equals("/routes/add")) {
-            addRouteRequest(form);
+            if (activeSession.account.role.equals(VEHICLE)) {
+                addVehicleRouteRequest(form);
+            } else {
+                addRouteRequest(form);
+            }
         } else if (path.equals("/routes/process")) {
             processRouteRequests();
         } else if (path.equals("/vehicles/position")) {
@@ -104,6 +195,233 @@ public class TrafficWebServer {
             processTrafficEvents();
         } else {
             setNotice("That action is not available.", Collections.emptyList(), true);
+        }
+    }
+
+    private void register(HttpExchange exchange, Map<String, String> form) throws IOException {
+        String username = form.get("username");
+        String password = form.get("password");
+        String vehicleId = form.get("vehicleId");
+        if (username == null || !username.matches("[A-Za-z0-9_-]{3,24}")) {
+            setNotice("Use a username with 3–24 letters, numbers, underscores, or hyphens.",
+                    Collections.emptyList(), true);
+            serveAuthPage(exchange, "register.html");
+            return;
+        }
+        if (password == null || password.length() < 8) {
+            setNotice("Password must contain at least 8 characters.",
+                    Collections.emptyList(), true);
+            serveAuthPage(exchange, "register.html");
+            return;
+        }
+
+        String key = username.toLowerCase(Locale.ROOT);
+        if (accounts.containsKey(key)) {
+            setNotice("That username is already registered.",
+                    Collections.emptyList(), true);
+            serveAuthPage(exchange, "register.html");
+            return;
+        }
+
+        String role;
+        if (!hasControllerAccount()) {
+            role = CONTROLLER;
+        } else {
+            role = VEHICLE;
+            if (getVehicle(vehicleId) == null || isVehicleRegistered(vehicleId)) {
+                setNotice("Select an emergency vehicle that has not been registered yet.",
+                        Collections.emptyList(), true);
+                serveAuthPage(exchange, "register.html");
+                return;
+            }
+        }
+
+        byte[] salt = new byte[16];
+        random.nextBytes(salt);
+        byte[] passwordHash = hashPassword(password.toCharArray(), salt);
+        Account account = new Account(username, role, vehicleId, salt, passwordHash);
+        accounts.put(key, account);
+        createSession(exchange, account);
+        redirect(exchange, homeFor(account));
+    }
+
+    private void login(HttpExchange exchange, Map<String, String> form) throws IOException {
+        String username = form.get("username");
+        String password = form.get("password");
+        String requestedRole = form.get("role");
+        Account account = username == null ? null
+                : accounts.get(username.toLowerCase(Locale.ROOT));
+        if (account == null || password == null || !account.role.equals(requestedRole)
+                || !passwordMatches(password.toCharArray(), account)) {
+            setNotice("Account type, username, or password is incorrect.",
+                    Collections.emptyList(), true);
+            serveAuthPage(exchange, "login.html");
+            return;
+        }
+        createSession(exchange, account);
+        redirect(exchange, homeFor(account));
+    }
+
+    private void logout(HttpExchange exchange) throws IOException {
+        if (activeSession != null) {
+            sessions.remove(activeSession.id);
+        }
+        exchange.getResponseHeaders().add("Set-Cookie",
+                "VEGAM_SESSION=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+        redirect(exchange, "/login");
+    }
+
+    private void createSession(HttpExchange exchange, Account account) {
+        byte[] token = new byte[32];
+        random.nextBytes(token);
+        String id = Base64.getUrlEncoder().withoutPadding().encodeToString(token);
+        UserSession session = new UserSession(id, account);
+        sessions.put(id, session);
+        activeSession = session;
+        exchange.getResponseHeaders().add("Set-Cookie",
+                "VEGAM_SESSION=" + id + "; Path=/; HttpOnly; SameSite=Lax");
+    }
+
+    private UserSession findSession(HttpExchange exchange) {
+        String cookieHeader = exchange.getRequestHeaders().getFirst("Cookie");
+        if (cookieHeader == null) {
+            return null;
+        }
+        for (String cookie : cookieHeader.split(";")) {
+            String[] pair = cookie.trim().split("=", 2);
+            if (pair.length == 2 && pair[0].equals("VEGAM_SESSION")) {
+                return sessions.get(pair[1]);
+            }
+        }
+        return null;
+    }
+
+    private boolean hasControllerAccount() {
+        for (Account account : accounts.values()) {
+            if (account.role.equals(CONTROLLER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isVehicleRegistered(String vehicleId) {
+        for (Account account : accounts.values()) {
+            if (account.role.equals(VEHICLE) && account.vehicleId.equals(vehicleId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private EmergencyVehicle getVehicle(String vehicleId) {
+        for (EmergencyVehicle vehicle : controller.getVehicles()) {
+            if (vehicle.getVehicleId().equals(vehicleId)) {
+                return vehicle;
+            }
+        }
+        return null;
+    }
+
+    private String homeFor(Account account) {
+        return account.role.equals(CONTROLLER) ? "/" : "/request";
+    }
+
+    private byte[] hashPassword(char[] password, byte[] salt) {
+        PBEKeySpec keySpec = new PBEKeySpec(
+                password, salt, PASSWORD_ITERATIONS, PASSWORD_KEY_LENGTH);
+        try {
+            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                    .generateSecret(keySpec).getEncoded();
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException("Could not hash account password.", exception);
+        } finally {
+            keySpec.clearPassword();
+            Arrays.fill(password, '\0');
+        }
+    }
+
+    private boolean passwordMatches(char[] password, Account account) {
+        byte[] submittedHash = hashPassword(password, account.salt);
+        if (submittedHash.length != account.passwordHash.length) {
+            return false;
+        }
+        int difference = 0;
+        for (int i = 0; i < submittedHash.length; i++) {
+            difference |= submittedHash[i] ^ account.passwordHash[i];
+        }
+        return difference == 0;
+    }
+
+    private void serveAuthPage(HttpExchange exchange, String fileName) throws IOException {
+        try {
+            String page = new String(Files.readAllBytes(Paths.get("web", fileName)),
+                    StandardCharsets.UTF_8);
+            page = page.replace("{{NOTICE}}", renderNotice())
+                    .replace("{{REGISTER_TITLE}}", hasControllerAccount()
+                            ? "Register an emergency vehicle"
+                            : "Register the traffic controller")
+                    .replace("{{REGISTER_HELP}}", hasControllerAccount()
+                            ? "Create an account for an emergency vehicle."
+                            : "Create the traffic controller account first.")
+                    .replace("{{VEHICLE_ACCOUNT_FIELD}}", renderVehicleAccountField());
+            sendHtml(exchange, 200, page);
+        } catch (IOException exception) {
+            sendHtml(exchange, 500, "<h1>Could not read web/"
+                    + escapeHtml(fileName) + "</h1>");
+        }
+    }
+
+    private String renderVehicleAccountField() {
+        if (!hasControllerAccount()) {
+            return "";
+        }
+        StringBuilder options = new StringBuilder();
+        for (EmergencyVehicle vehicle : controller.getVehicles()) {
+            if (!isVehicleRegistered(vehicle.getVehicleId())) {
+                options.append("<option value=\"")
+                        .append(escapeHtml(vehicle.getVehicleId())).append("\">")
+                        .append(escapeHtml(vehicle.getVehicleId())).append(" · ")
+                        .append(escapeHtml(vehicle.getType())).append("</option>");
+            }
+        }
+        if (options.length() == 0) {
+            return "<p class=\"helper-text\">All emergency vehicles already have accounts.</p>";
+        }
+        return "<label for=\"vehicle-id\">Emergency vehicle</label>"
+                + "<select id=\"vehicle-id\" name=\"vehicleId\" required>"
+                + options + "</select>";
+    }
+
+    private void serveVehicleRequestPage(HttpExchange exchange) throws IOException {
+        try {
+            String page = new String(Files.readAllBytes(
+                    Paths.get("web", "vehicle_request.html")), StandardCharsets.UTF_8);
+            EmergencyVehicle vehicle = getVehicle(activeSession.account.vehicleId);
+            if (vehicle == null) {
+                sendHtml(exchange, 500, "<h1>Registered vehicle was not found.</h1>");
+                return;
+            }
+            String vehicleType = getDispatcherType(vehicle.getType());
+            List<String> junctions = controller.getRoadNetwork().getJunctions();
+            Collections.sort(junctions, this::compareIds);
+            page = page.replace("{{NOTICE}}", renderNotice())
+                    .replace("{{ACCOUNT_SUMMARY}}",
+                            escapeHtml(activeSession.account.username) + " · Emergency vehicle")
+                    .replace("{{VEHICLE_NAME}}",
+                            escapeHtml(vehicle.getVehicleId() + " · " + vehicle.getType()))
+                    .replace("{{VEHICLE_POSITION}}",
+                            escapeHtml(vehicle.getCurrentJunction()))
+                    .replace("{{SITUATION_OPTIONS}}", renderSituationOptions(vehicleType))
+                    .replace("{{JUNCTION_OPTIONS}}",
+                            renderJunctionOptions(junctions, vehicle.getCurrentJunction()))
+                    .replace("{{VEHICLE_ROUTE_RESULTS}}",
+                            renderProcessedRoutes(
+                                    controller.getProcessedRoutesForVehicle(vehicle.getVehicleId()))
+                                    .replace("Processed journey map", "Your processed routes"));
+            sendHtml(exchange, 200, page);
+        } catch (IOException exception) {
+            sendHtml(exchange, 500, "<h1>Could not read web/vehicle_request.html</h1>");
         }
     }
 
@@ -125,12 +443,8 @@ public class TrafficWebServer {
                     throw new IllegalArgumentException(
                             "No available vehicle of the selected type.");
                 }
-                if (!controller.setVehiclePosition(vehicle.getVehicleId(), source)) {
-                    throw new IllegalArgumentException("The vehicle origin is invalid.");
-                }
                 if (controller.addRoutingRequest(request)) {
                     requestArrivalOrder = order;
-                    selectedVehicleType = vehicleType;
                     setNotice(vehicleType + " request added as "
                                     + request.getSeverity() + " priority.",
                             Collections.singletonList(request.toString()), false);
@@ -148,12 +462,67 @@ public class TrafficWebServer {
         String vehicleType = form.get("vehicleType");
         try {
             DispatcherRequestFactory.getSituations(vehicleType);
-            selectedVehicleType = vehicleType;
             setNotice(vehicleType + " situations loaded. Choose a situation and enter route details.",
                     Collections.emptyList(), false);
         } catch (IllegalArgumentException exception) {
             setNotice(exception.getMessage(), Collections.emptyList(), true);
         }
+    }
+
+    private void addVehicleRouteRequest(Map<String, String> form) {
+        synchronized (controller) {
+            EmergencyVehicle vehicle = getVehicle(activeSession.account.vehicleId);
+            if (vehicle == null) {
+                setNotice("Your registered emergency vehicle was not found.",
+                        Collections.emptyList(), true);
+                return;
+            }
+
+            String source = form.get("source");
+            String destination = form.get("destination");
+            String description = form.get("description");
+            String vehicleType = getDispatcherType(vehicle.getType());
+            String situation = form.get("situation");
+            try {
+                if (!controller.getRoadNetwork().hasJunction(source)
+                        || !controller.getRoadNetwork().hasJunction(destination)) {
+                    throw new IllegalArgumentException(
+                            "Choose valid starting and destination junctions.");
+                }
+                if (description == null || description.trim().isEmpty()) {
+                    throw new IllegalArgumentException("Enter an incident description.");
+                }
+
+                int order = requestArrivalOrder + 1;
+                String severity = DispatcherRequestFactory.getSeverity(vehicleType, situation);
+                RoutingRequest request = new RoutingRequest("REQ-" + order,
+                        vehicle.getVehicleId(), source, destination, severity, order,
+                        vehicleType, description.trim());
+                if (!controller.addRoutingRequest(request)) {
+                    throw new IllegalArgumentException(
+                            "The traffic controller rejected the routing request.");
+                }
+                requestArrivalOrder = order;
+                vehicle.updatePosition(source);
+                setNotice("Your routing request was sent to the traffic controller.",
+                        Collections.emptyList(), false);
+            } catch (IllegalArgumentException exception) {
+                setNotice(exception.getMessage(), Collections.emptyList(), true);
+            }
+        }
+    }
+
+    private String getDispatcherType(String vehicleModelType) {
+        if (vehicleModelType.equalsIgnoreCase("Ambulance")) {
+            return DispatcherRequestFactory.AMBULANCE;
+        }
+        if (vehicleModelType.equalsIgnoreCase("Fire Truck")) {
+            return DispatcherRequestFactory.FIRE_TRUCK;
+        }
+        if (vehicleModelType.equalsIgnoreCase("Police Vehicle")) {
+            return DispatcherRequestFactory.POLICE;
+        }
+        throw new IllegalArgumentException("Unsupported emergency vehicle type.");
     }
 
     private void processRouteRequests() {
@@ -300,6 +669,8 @@ public class TrafficWebServer {
 
             page = page.replace("{{NOTICE}}", renderNotice())
             .replace("{{ROUTE_VISUALIZATION}}", renderProcessedRoutes())
+                    .replace("{{ACCOUNT_SUMMARY}}",
+                            escapeHtml(activeSession.account.username) + " · Traffic controller")
                     .replace("{{JUNCTION_COUNT}}", Integer.toString(junctions.size()))
                     .replace("{{OPEN_ROAD_COUNT}}", Integer.toString(openRoads))
                     .replace("{{ROAD_SUMMARY}}",
@@ -313,16 +684,15 @@ public class TrafficWebServer {
                     .replace("{{QUEUE_SUMMARY}}",
                             controller.getPendingRequestCount() + " route requests · "
                                     + controller.getPendingEventCount() + " traffic events")
+                    .replace("{{PENDING_REQUEST_COUNT}}",
+                            Integer.toString(controller.getPendingRequestCount()))
+                    .replace("{{PENDING_REQUEST_LIST}}", renderPendingRequests())
                     .replace("{{ROAD_LIST}}", renderRoads(roads))
                     .replace("{{VEHICLE_LIST}}", renderVehicles(vehicles))
                     .replace("{{VEHICLE_OPTIONS}}", renderVehicleOptions(vehicles))
                     .replace("{{DISPATCHER_VEHICLE_OPTIONS}}",
                             renderDispatcherVehicleOptions())
-                    .replace("{{DISPATCHER_SITUATION_OPTIONS}}",
-                            renderSituationOptions(selectedVehicleType))
                     .replace("{{ASSIGNED_UNIT}}", renderAssignedUnit())
-                    .replace("{{SELECTED_VEHICLE_TYPE}}",
-                            escapeHtml(selectedVehicleType))
                     .replace("{{JUNCTION_OPTIONS}}", renderJunctionOptions(junctions))
                     .replace("{{ROAD_OPTIONS}}", renderRoadOptions(roads));
             return page;
@@ -330,18 +700,22 @@ public class TrafficWebServer {
     }
 
     private String renderNotice() {
-        if (notice.isEmpty()) {
+        String message = activeSession == null ? notice : activeSession.notice;
+        boolean isError = activeSession == null ? noticeIsError : activeSession.noticeIsError;
+        List<String> details = activeSession == null
+                ? noticeDetails : activeSession.noticeDetails;
+        if (message.isEmpty()) {
             return "";
         }
         StringBuilder html = new StringBuilder("<div class=\"notice");
-        if (noticeIsError) {
+        if (isError) {
             html.append(" error");
         }
         html.append("\" role=\"status\">")
-                .append(escapeHtml(notice));
-        if (!noticeDetails.isEmpty()) {
+                .append(escapeHtml(message));
+        if (!details.isEmpty()) {
             html.append("<ul>");
-            for (String detail : noticeDetails) {
+            for (String detail : details) {
                 html.append("<li>").append(escapeHtml(detail)).append("</li>");
             }
             html.append("</ul>");
@@ -349,8 +723,36 @@ public class TrafficWebServer {
         return html.append("</div>").toString();
     }
 
+    private String renderPendingRequests() {
+        List<RoutingRequest> requests = controller.getPendingRequests();
+        if (requests.isEmpty()) {
+            return "<p class=\"empty-queue\">No requests are waiting to be processed.</p>";
+        }
+        StringBuilder html = new StringBuilder();
+        for (RoutingRequest request : requests) {
+            html.append("<article class=\"pending-request\"><div><span class=\"route-priority ")
+                    .append(request.getSeverity().toLowerCase())
+                    .append("\">").append(escapeHtml(request.getSeverity().toUpperCase()))
+                    .append("</span><strong>")
+                    .append(escapeHtml(request.getRequestId())).append(" · ")
+                    .append(escapeHtml(request.getVehicleId()))
+                    .append("</strong></div><p>")
+                    .append(escapeHtml(request.getSource())).append(" → ")
+                    .append(escapeHtml(request.getDestination()))
+                    .append("</p><small>")
+                    .append(escapeHtml(request.getDescription()))
+                    .append(" · Arrival #").append(request.getArrivalOrder())
+                    .append(" at ").append(escapeHtml(request.getRequestedAtFormatted()))
+                    .append("</small></article>");
+        }
+        return html.toString();
+    }
+
     private String renderProcessedRoutes() {
-        List<ProcessedRoute> processedRoutes = controller.getLastProcessedRoutes();
+        return renderProcessedRoutes(controller.getLastProcessedRoutes());
+    }
+
+    private String renderProcessedRoutes(List<ProcessedRoute> processedRoutes) {
         if (processedRoutes.isEmpty()) {
             return "";
         }
@@ -545,7 +947,7 @@ public class TrafficWebServer {
         };
         for (String vehicleType : vehicleTypes) {
             html.append("<option value=\"").append(vehicleType).append("\"");
-            if (vehicleType.equals(selectedVehicleType)) {
+            if (vehicleType.equals(DispatcherRequestFactory.AMBULANCE)) {
                 html.append(" selected");
             }
             html.append(">").append(vehicleType.replace('_', ' '))
@@ -569,10 +971,10 @@ public class TrafficWebServer {
 
     private String renderAssignedUnit() {
         EmergencyVehicle vehicle = DispatcherRequestFactory.findVehicle(
-                controller, selectedVehicleType);
+                controller, DispatcherRequestFactory.AMBULANCE);
         if (vehicle == null) {
             return "<p class=\"assigned-unit unavailable\">No available "
-                    + escapeHtml(selectedVehicleType.replace('_', ' '))
+                    + "AMBULANCE"
                     + " is registered.</p>";
         }
         return "<p class=\"assigned-unit\">Assigned unit: <strong>"
@@ -582,10 +984,17 @@ public class TrafficWebServer {
     }
 
     private String renderJunctionOptions(List<String> junctions) {
+        return renderJunctionOptions(junctions, null);
+    }
+
+    private String renderJunctionOptions(List<String> junctions, String selectedJunction) {
         StringBuilder html = new StringBuilder();
         for (String junction : junctions) {
-            html.append("<option value=\"").append(escapeHtml(junction))
-                    .append("\">").append(escapeHtml(junction)).append("</option>");
+            html.append("<option value=\"").append(escapeHtml(junction)).append("\"");
+            if (junction.equals(selectedJunction)) {
+                html.append(" selected");
+            }
+            html.append(">").append(escapeHtml(junction)).append("</option>");
         }
         return html.toString();
     }
@@ -650,9 +1059,21 @@ public class TrafficWebServer {
     }
 
     private void setNotice(String message, List<String> details, boolean isError) {
-        notice = message;
-        noticeDetails = details;
-        noticeIsError = isError;
+        if (activeSession == null) {
+            notice = message;
+            noticeDetails = details;
+            noticeIsError = isError;
+        } else {
+            activeSession.notice = message;
+            activeSession.noticeDetails = details;
+            activeSession.noticeIsError = isError;
+        }
+    }
+
+    private void redirect(HttpExchange exchange, String location) throws IOException {
+        exchange.getResponseHeaders().set("Location", location);
+        exchange.sendResponseHeaders(303, -1);
+        exchange.close();
     }
 
     private void sendHtml(HttpExchange exchange, int status, String html)
@@ -662,5 +1083,35 @@ public class TrafficWebServer {
         exchange.sendResponseHeaders(status, content.length);
         exchange.getResponseBody().write(content);
         exchange.close();
+    }
+
+    private static class Account {
+        private final String username;
+        private final String role;
+        private final String vehicleId;
+        private final byte[] salt;
+        private final byte[] passwordHash;
+
+        private Account(String username, String role, String vehicleId,
+                        byte[] salt, byte[] passwordHash) {
+            this.username = username;
+            this.role = role;
+            this.vehicleId = vehicleId;
+            this.salt = salt;
+            this.passwordHash = passwordHash;
+        }
+    }
+
+    private static class UserSession {
+        private final String id;
+        private final Account account;
+        private String notice = "";
+        private boolean noticeIsError;
+        private List<String> noticeDetails = Collections.emptyList();
+
+        private UserSession(String id, Account account) {
+            this.id = id;
+            this.account = account;
+        }
     }
 }

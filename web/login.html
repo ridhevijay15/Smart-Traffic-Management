@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VegamTraffic | Login</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="auth-page">
+    <main class="auth-card">
+        <a class="brand auth-brand" href="/login"><span class="brand-mark">V</span>
+            <span>Vegam<span class="brand-light">Traffic</span><small>TRAFFIC MANAGEMENT</small></span>
+        </a>
+        <p class="eyebrow">WELCOME BACK</p>
+        <h1>Login to VegamTraffic</h1>
+        <p class="subtitle">Choose the type of account you want to access.</p>
+        {{NOTICE}}
+        <form method="post" action="/login">
+            <label for="account-type">Login as</label>
+            <select id="account-type" name="role" required>
+                <option value="CONTROLLER">Traffic controller</option>
+                <option value="VEHICLE">Emergency vehicle</option>
+            </select>
+            <label for="username">Username</label>
+            <input id="username" name="username" autocomplete="username" required>
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password"
+                   autocomplete="current-password" required>
+            <button class="button button-primary" type="submit">Login</button>
+        </form>
+        <p class="auth-link">New here? <a href="/register">Create an account</a></p>
+    </main>
+</body>
+</html>

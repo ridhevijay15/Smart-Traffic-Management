@@ -13,6 +13,7 @@ public class TrafficController {
     private PriorityQueue<RoutingRequest> requestQueue;
     private ArrayDeque<TrafficEvent> trafficEvents;
     private List<ProcessedRoute> lastProcessedRoutes;
+    private List<ProcessedRoute> processedRouteHistory;
 
     public TrafficController(RoadNetwork roadNetwork) {
         this.roadNetwork = roadNetwork;
@@ -21,6 +22,7 @@ public class TrafficController {
         requestQueue = new PriorityQueue<>();
         trafficEvents = new ArrayDeque<>();
         lastProcessedRoutes = new ArrayList<>();
+        processedRouteHistory = new ArrayList<>();
     }
 
     public void addVehicle(EmergencyVehicle vehicle) {
@@ -39,12 +41,31 @@ public class TrafficController {
         return requestQueue.size();
     }
 
+    public List<RoutingRequest> getPendingRequests() {
+        PriorityQueue<RoutingRequest> pending = new PriorityQueue<>(requestQueue);
+        List<RoutingRequest> requests = new ArrayList<>();
+        while (!pending.isEmpty()) {
+            requests.add(pending.poll());
+        }
+        return requests;
+    }
+
     public int getPendingEventCount() {
         return trafficEvents.size();
     }
 
     public List<ProcessedRoute> getLastProcessedRoutes() {
         return new ArrayList<>(lastProcessedRoutes);
+    }
+
+    public List<ProcessedRoute> getProcessedRoutesForVehicle(String vehicleId) {
+        List<ProcessedRoute> routes = new ArrayList<>();
+        for (ProcessedRoute processedRoute : processedRouteHistory) {
+            if (processedRoute.getRequest().getVehicleId().equals(vehicleId)) {
+                routes.add(processedRoute);
+            }
+        }
+        return routes;
     }
 
     public String getVehiclePosition(String vehicleId) {
@@ -139,7 +160,7 @@ public class TrafficController {
                         + request.getRequestId() + ".";
                 System.out.println(message);
                 results.add(message);
-                lastProcessedRoutes.add(new ProcessedRoute(request, null));
+                addProcessedRoute(new ProcessedRoute(request, null));
                 continue;
             }
 
@@ -158,12 +179,12 @@ public class TrafficController {
                         + " | " + request.getArrivalDetails() + ".";
                 System.out.println(message);
                 results.add(message);
-                lastProcessedRoutes.add(new ProcessedRoute(request, null));
+                addProcessedRoute(new ProcessedRoute(request, null));
                 continue;
             }
 
             route.displayRoute();
-            lastProcessedRoutes.add(new ProcessedRoute(request, route));
+            addProcessedRoute(new ProcessedRoute(request, route));
             vehicle.updatePosition(request.getDestination());
             StringBuilder path = new StringBuilder();
             for (String junction : route.getJunctions()) {
@@ -182,6 +203,11 @@ public class TrafficController {
             results.add(message);
         }
         return results;
+    }
+
+    private void addProcessedRoute(ProcessedRoute processedRoute) {
+        lastProcessedRoutes.add(processedRoute);
+        processedRouteHistory.add(processedRoute);
     }
 
     public boolean hasRoad(String roadId) {

@@ -13,8 +13,20 @@ java -cp out Main --web
 
 Open [http://localhost:8080](http://localhost:8080). Stop the server with `Ctrl+C`. The dashboard binds to the local computer and simulation changes reset when the program is restarted.
 
-The website is organized into separate Dashboard, Dispatcher, Roads & Events,
-and Vehicles pages using the left-side navigation.
+On first use, create the traffic-controller account. Then register an account
+for each emergency vehicle. Accounts and login sessions are held in memory and
+reset when the server stops; passwords are hashed, but this local classroom
+demo is not production authentication.
+
+The first account is the traffic controller. After that, each emergency vehicle
+can be registered to one account. Controllers can view and process requests
+and manage road events. Emergency-vehicle accounts can only submit requests for
+their assigned vehicle; they can choose a starting junction and destination.
+After the controller processes a request, its route map, junction sequence,
+and travel time appear in the vehicle's portal.
+
+The controller website is organized into separate Dashboard, Dispatcher,
+Roads & Events, and Vehicles pages using the left-side navigation.
 After processing route requests, the Dispatcher page shows a route map image:
 the selected directed roads and junctions are highlighted, alongside the
 request's priority, arrival time, and calculated travel time. Unreachable
@@ -28,11 +40,11 @@ java -cp out Main
 
 ## Emergency dispatcher
 
-The website's **Request an emergency route** panel is the dispatcher: choose a
-vehicle type, load its situations, choose a situation, then enter the origin,
-destination, and incident description. The server classifies severity from the
-vehicle type and situation; the dispatcher does not accept a manually entered
-severity. Those requests enter the same priority queue and are processed
+Emergency vehicle accounts choose a situation, starting junction, destination,
+and incident description. The selected starting junction updates that vehicle's
+simulated position when the request is accepted.
+The server classifies severity from vehicle type and situation; the dispatcher
+does not accept a manually entered severity. Those requests enter the same priority queue and are processed
 Critical, High, then Normal, with arrival order breaking ties. Each request also
 records and displays its local date and time alongside its arrival number.
 
@@ -90,8 +102,9 @@ The website uses plain HTML forms and CSS. The built-in Java HTTP server renders
 
 ## Try a demo
 
-1. Add a Critical route request for V1 to J8 and process the priority queue.
-2. Add a congestion update to an open road and apply queued events; verify that its travel time changes in the road list.
-3. Close a road on a route and submit another request; the fastest route will be recalculated using open roads only.
-4. Close all usable outgoing roads toward a destination to see an unreachable-route result.
-5. Add requests at different severities and process them together to see severity order and arrival-order tie breaking.
+1. Register the controller account, log in, then register a vehicle account for V1.
+2. Log in as V1 and request a Critical route to J8.
+3. Log back in as the controller, review the incoming request, and process the queue.
+4. Submit congestion and close/open road events, then apply them to the network.
+5. Submit requests with different severities to see priority ordering and arrival-order tie breaking.
+6. Close the roads needed to reach a destination to see an unreachable-route result.

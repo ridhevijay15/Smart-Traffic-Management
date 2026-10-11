@@ -409,3 +409,82 @@ footer { padding-top: 24px; }
     .panel,.dispatcher-form-panel,.roads-table-panel,.event-form-panel,.vehicles-directory,.position-panel { padding: 16px; }
     .dashboard-card { border-radius: 12px; min-height: 160px; padding: 18px; }
 }
+
+.auth-page {
+    align-items: center;
+    background:
+        radial-gradient(circle at 80% 16%, #72d6ad35, transparent 29%),
+        linear-gradient(135deg, #102b39, #155849);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+}
+.auth-card {
+    background: #fff;
+    border: 1px solid #ffffff80;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px #071d2852;
+    max-width: 440px;
+    padding: 34px;
+    width: 100%;
+}
+.auth-brand { color: #173746; margin-bottom: 34px; }
+.auth-brand .brand-light { color: #769099; }
+.auth-card h1 { color: #173746; font-size: 25px; margin-top: 9px; }
+.auth-card > .subtitle { line-height: 1.6; margin: 9px 0 18px; }
+.auth-card .button { justify-content: center; margin-top: 22px; }
+.auth-link { color: #6e8088; font-size: 12px; margin: 20px 0 0; text-align: center; }
+.auth-link a { color: #087e66; font-weight: 700; text-decoration: none; }
+.auth-link a:hover { text-decoration: underline; }
+.sidebar-account {
+    border-top: 1px solid #ffffff20;
+    color: #c4d7d6;
+    font-size: 11px;
+    line-height: 1.6;
+    margin-top: auto;
+    overflow-wrap: anywhere;
+    padding: 17px 10px 8px;
+}
+.sidebar-logout { margin: auto 0 0; }
+.logout-button {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    width: 100%;
+}
+.logout-button:hover { background: #ffffff12; }
+.queue-panel { min-height: 240px; }
+.pending-request-list { display: grid; gap: 10px; }
+.pending-request {
+    background: #fbfdfb;
+    border: 1px solid #e3ebe7;
+    border-radius: 10px;
+    padding: 13px 15px;
+}
+.pending-request > div { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
+.pending-request strong { color: #254351; font-size: 12px; }
+.pending-request p { color: #334e5a; font-size: 13px; font-weight: 600; margin: 10px 0 5px; }
+.pending-request small { color: #82929a; font-size: 10px; line-height: 1.5; }
+.empty-queue {
+    background: #f4f8f5;
+    border-radius: 9px;
+    color: #75858b;
+    font-size: 12px;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+}
+.vehicle-request-panel { max-width: 850px; padding: 26px; }
+.vehicle-request-panel .assigned-unit { margin: 6px 0 15px; }
+
+@media (max-width: 790px) {
+    .sidebar-account { display: none; }
+}
+@media (max-width: 560px) {
+    .auth-page { padding: 14px; }
+    .auth-card { border-radius: 14px; padding: 25px 21px; }
+    .vehicle-request-panel { padding: 17px; }
+}

@@ -16,6 +16,10 @@
         <a class="nav-item" href="/dispatcher"><span>↗</span> Dispatcher</a>
         <a class="nav-item active" href="/roads"><span>⌁</span> Roads &amp; events</a>
         <a class="nav-item" href="/vehicles"><span>◉</span> Vehicles</a>
+        <div class="sidebar-account">{{ACCOUNT_SUMMARY}}</div>
+        <form method="post" action="/logout" class="sidebar-logout">
+            <button class="nav-item logout-button" type="submit"><span>↪</span> Logout</button>
+        </form>
     </aside>
     <main class="main-content">
         <header class="topbar">

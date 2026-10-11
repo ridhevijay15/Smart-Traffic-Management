@@ -16,6 +16,10 @@
         <a class="nav-item active" href="/dispatcher"><span>↗</span> Dispatcher</a>
         <a class="nav-item" href="/roads"><span>⌁</span> Roads &amp; events</a>
         <a class="nav-item" href="/vehicles"><span>◉</span> Vehicles</a>
+        <div class="sidebar-account">{{ACCOUNT_SUMMARY}}</div>
+        <form method="post" action="/logout" class="sidebar-logout">
+            <button class="nav-item logout-button" type="submit"><span>↪</span> Logout</button>
+        </form>
     </aside>
     <main class="main-content">
         <header class="topbar">
@@ -23,46 +27,17 @@
         </header>
         <section class="page-heading">
             <div><p class="eyebrow">EMERGENCY RESPONSE</p><h1>Dispatcher</h1>
-                <p class="subtitle">Create requests from incident details; priority is assigned automatically.</p></div>
+                <p class="subtitle">Review incoming requests and process them by priority.</p></div>
             <div class="city-chip"><span>≋</span> {{QUEUE_COUNT}} QUEUED <i>●</i></div>
         </section>
         {{NOTICE}}
         <section class="dispatcher-layout">
-            <article class="panel form-panel dispatcher-form-panel">
+            <article class="panel queue-panel">
                 <div class="panel-heading">
-                    <div><p class="eyebrow">NEW ROUTING REQUEST</p><h2>Incident details</h2></div>
-                    <span class="heading-icon">↗</span>
+                    <div><p class="eyebrow">WAITING FOR ROUTING</p><h2>Incoming requests</h2></div>
+                    <span class="city-chip">{{PENDING_REQUEST_COUNT}} WAITING</span>
                 </div>
-                <form method="post" action="/routes/type" class="type-form">
-                    <label for="dispatcher-vehicle-type">Emergency vehicle type</label>
-                    <div class="inline-fields">
-                        <select id="dispatcher-vehicle-type" name="vehicleType" required>
-                            {{DISPATCHER_VEHICLE_OPTIONS}}
-                        </select>
-                        <button class="button button-secondary" type="submit">Load situations</button>
-                    </div>
-                </form>
-                <p class="helper-text">Load the situations for the selected vehicle before creating a request.</p>
-                {{ASSIGNED_UNIT}}
-                <form method="post" action="/routes/add">
-                    <input type="hidden" name="vehicleType" value="{{SELECTED_VEHICLE_TYPE}}">
-                    <label for="situation-select">Incident situation and priority</label>
-                    <select id="situation-select" name="situation" required>
-                        {{DISPATCHER_SITUATION_OPTIONS}}
-                    </select>
-                    <div class="inline-fields">
-                        <div><label for="source-select">Origin junction</label>
-                            <select id="source-select" name="source" required>{{JUNCTION_OPTIONS}}</select>
-                        </div>
-                        <div><label for="destination-select">Destination junction</label>
-                            <select id="destination-select" name="destination" required>{{JUNCTION_OPTIONS}}</select>
-                        </div>
-                    </div>
-                    <label for="incident-description">Incident description</label>
-                    <textarea id="incident-description" name="description" rows="4"
-                              placeholder="Describe the emergency..." required></textarea>
-                    <button class="button button-primary" type="submit">Add routing request <span>→</span></button>
-                </form>
+                <div class="pending-request-list">{{PENDING_REQUEST_LIST}}</div>
             </article>
             <aside class="dispatcher-side">
                 <article class="panel priority-panel">
@@ -86,7 +61,7 @@
             </aside>
         </section>
         {{ROUTE_VISUALIZATION}}
-        <footer>VegamTraffic <span>·</span> Request priority comes from selected vehicle type and incident situation.</footer>
+        <footer>Process requests by severity, with arrival order breaking ties.</footer>
     </main>
 </body>
 </html>

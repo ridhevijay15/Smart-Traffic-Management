@@ -16,6 +16,10 @@
         <a class="nav-item" href="/dispatcher"><span>↗</span> Dispatcher</a>
         <a class="nav-item" href="/roads"><span>⌁</span> Roads &amp; events</a>
         <a class="nav-item" href="/vehicles"><span>◉</span> Vehicles</a>
+        <div class="sidebar-account">{{ACCOUNT_SUMMARY}}</div>
+        <form method="post" action="/logout" class="sidebar-logout">
+            <button class="nav-item logout-button" type="submit"><span>↪</span> Logout</button>
+        </form>
     </aside>
     <main class="main-content">
         <header class="topbar">
@@ -47,8 +51,8 @@
         <section class="dashboard-grid">
             <a class="dashboard-card" href="/dispatcher">
                 <span class="dashboard-card-icon icon-green">↗</span>
-                <span><strong>Dispatch a vehicle</strong><small>Create a situation-based routing request and process priority order.</small></span>
-                <b>Open dispatcher →</b>
+                <span><strong>Review route requests</strong><small>See incoming emergency requests and process them in priority order.</small></span>
+                <b>Open request queue →</b>
             </a>
             <a class="dashboard-card" href="/roads">
                 <span class="dashboard-card-icon icon-blue">⌁</span>

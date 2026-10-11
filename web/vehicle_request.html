@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VegamTraffic | Request a route</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <a class="brand" href="/request"><span class="brand-mark">V</span>
+            <span>Vegam<span class="brand-light">Traffic</span><small>EMERGENCY VEHICLE</small></span>
+        </a>
+        <p class="nav-label">VEHICLE PORTAL</p>
+        <a class="nav-item active" href="/request"><span>↗</span> Request a route</a>
+        <div class="sidebar-account">{{ACCOUNT_SUMMARY}}</div>
+        <form method="post" action="/logout" class="sidebar-logout">
+            <button class="nav-item logout-button" type="submit"><span>↪</span> Logout</button>
+        </form>
+    </aside>
+    <main class="main-content">
+        <header class="topbar"><div class="breadcrumb">VegamTraffic <span>/</span> Request a route</div></header>
+        <section class="page-heading">
+            <div><p class="eyebrow">EMERGENCY RESPONSE</p><h1>Request a route</h1>
+                <p class="subtitle">Submit an incident for the traffic controller to process.</p></div>
+            <div class="city-chip">{{VEHICLE_NAME}}</div>
+        </section>
+        {{NOTICE}}
+        <section class="panel form-panel vehicle-request-panel">
+            <div class="panel-heading">
+                <div><p class="eyebrow">NEW ROUTING REQUEST</p><h2>Incident details</h2></div>
+                <span class="heading-icon">↗</span>
+            </div>
+            <p class="assigned-unit">Assigned vehicle: <strong>{{VEHICLE_NAME}}</strong>
+                · Current position: <strong>{{VEHICLE_POSITION}}</strong></p>
+            <form method="post" action="/routes/add">
+                <label for="situation-select">Incident situation and priority</label>
+                <select id="situation-select" name="situation" required>{{SITUATION_OPTIONS}}</select>
+                <label for="source-select">Starting junction</label>
+                <select id="source-select" name="source" required>{{JUNCTION_OPTIONS}}</select>
+                <label for="destination-select">Destination junction</label>
+                <select id="destination-select" name="destination" required>{{JUNCTION_OPTIONS}}</select>
+                <label for="incident-description">Incident description</label>
+                <textarea id="incident-description" name="description" rows="4"
+                          placeholder="Describe the emergency..." required></textarea>
+                <button class="button button-primary" type="submit">Send request to controller <span>→</span></button>
+            </form>
+        </section>
+        {{VEHICLE_ROUTE_RESULTS}}
+        <footer>Your request will be prioritized by severity, then arrival order.</footer>
+    </main>
+</body>
+</html>
