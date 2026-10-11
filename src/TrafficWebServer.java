@@ -98,6 +98,8 @@ public class TrafficWebServer {
             updateVehiclePosition(form);
         } else if (path.equals("/events/add")) {
             addTrafficEvent(form);
+        } else if (path.equals("/events/status")) {
+            addRoadStatusEvent(form);
         } else if (path.equals("/events/process")) {
             processTrafficEvents();
         } else {
@@ -187,7 +189,44 @@ public class TrafficWebServer {
     private void addTrafficEvent(Map<String, String> form) {
         synchronized (controller) {
             String roadId = form.get("roadId");
-            String type = form.get("type");
+            if (!controller.hasRoad(roadId)) {
+                setNotice("Select a valid road.", Collections.emptyList(), true);
+                return;
+            }
+
+            int order = eventArrivalOrder + 1;
+            String eventId = "EV-" + order;
+            int newTravelTime;
+            try {
+                newTravelTime = Integer.parseInt(form.get("travelTime"));
+            } catch (NumberFormatException exception) {
+                setNotice("Travel time must be a positive whole number.",
+                        Collections.emptyList(), true);
+                return;
+            }
+            if (newTravelTime <= 0) {
+                setNotice("Travel time must be a positive whole number.",
+                        Collections.emptyList(), true);
+                return;
+            }
+            TrafficEvent event = new CongestionEvent(
+                    eventId, roadId, order, newTravelTime);
+
+            if (controller.addTrafficEvent(event)) {
+                eventArrivalOrder = order;
+                setNotice("Traffic event added to the FIFO event queue.",
+                        Collections.emptyList(), false);
+            } else {
+                setNotice("The traffic event could not be added.",
+                        Collections.emptyList(), true);
+            }
+        }
+    }
+
+    private void addRoadStatusEvent(Map<String, String> form) {
+        synchronized (controller) {
+            String roadId = form.get("roadId");
+            String status = form.get("status");
             if (!controller.hasRoad(roadId)) {
                 setNotice("Select a valid road.", Collections.emptyList(), true);
                 return;
@@ -196,35 +235,22 @@ public class TrafficWebServer {
             int order = eventArrivalOrder + 1;
             String eventId = "EV-" + order;
             TrafficEvent event;
-            if ("closure".equals(type)) {
+            if ("close".equals(status)) {
                 event = new ClosureEvent(eventId, roadId, order);
-            } else if ("congestion".equals(type)) {
-                int newTravelTime;
-                try {
-                    newTravelTime = Integer.parseInt(form.get("travelTime"));
-                } catch (NumberFormatException exception) {
-                    setNotice("Travel time must be a positive whole number.",
-                            Collections.emptyList(), true);
-                    return;
-                }
-                if (newTravelTime <= 0) {
-                    setNotice("Travel time must be a positive whole number.",
-                            Collections.emptyList(), true);
-                    return;
-                }
-                event = new CongestionEvent(eventId, roadId, order, newTravelTime);
+            } else if ("open".equals(status)) {
+                event = new OpenRoadEvent(eventId, roadId, order);
             } else {
-                setNotice("Choose congestion or road closure.",
+                setNotice("Choose whether to close or open the road.",
                         Collections.emptyList(), true);
                 return;
             }
 
             if (controller.addTrafficEvent(event)) {
                 eventArrivalOrder = order;
-                setNotice("Traffic event added to the FIFO event queue.",
+                setNotice("Road status event added to the FIFO event queue.",
                         Collections.emptyList(), false);
             } else {
-                setNotice("The traffic event could not be added.",
+                setNotice("The road status event could not be added.",
                         Collections.emptyList(), true);
             }
         }

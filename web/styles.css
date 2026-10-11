@@ -122,6 +122,9 @@ a { color: inherit; }
 .roads-table-panel,.event-form-panel { padding: 21px; }
 .road-list.full-list { max-height: none; overflow: visible; }
 .event-queue-info { border-bottom: 0; border-top: 1px solid #edf0f2; margin-top: 18px; }
+.road-status-form { border-top: 1px solid #edf0f2; margin-top: 18px; padding-top: 4px; }
+.event-form-title { color: #314957; font: 700 12px 'Manrope',sans-serif; margin: 18px 0 4px; }
+.event-form-panel > .panel-heading + form .event-form-title { margin-top: 0; }
 .vehicles-directory,.position-panel { margin-bottom: 16px; padding: 22px; }
 .vehicles-directory .vehicle-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .position-panel { max-width: 760px; }

@@ -73,7 +73,7 @@ controller.addRoutingRequest(request);
 - Manual vehicle-position updates and route requests with Critical, High, or Normal severity.
 - Console and Swing emergency-dispatcher interfaces with situation-based severity classification.
 - A priority queue orders route requests by severity and then arrival order.
-- Congestion and closure updates wait in a FIFO queue and are applied before the next route calculation.
+- Congestion, road-close, and road-open updates wait in a FIFO queue and are applied before the next route calculation.
 - Dijkstra's algorithm finds the fastest route through open roads; unreachable destinations are reported.
 - Processed routes are shown as server-rendered SVG maps; no browser scripting is needed.
 - The dashboard displays current road times and closures, vehicle locations, queue sizes, and route results.

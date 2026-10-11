@@ -45,7 +45,7 @@ public class Main {
             System.out.println("3. Add Routing Request");
             System.out.println("4. Process Routing Requests");
             System.out.println("5. Add Congestion Event");
-            System.out.println("6. Add Road Closure Event");
+            System.out.println("6. Change Road Status (close/open)");
             System.out.println("7. Process Traffic Events");
             System.out.println("8. Display Road Status");
             System.out.println("9. Create Dispatcher Request (console)");
@@ -174,31 +174,43 @@ public class Main {
                     break;
 
                 // ==================================
-                // ADD ROAD CLOSURE EVENT
+                // CHANGE ROAD STATUS
                 // ==================================
 
                 case 6:
 
-                    System.out.print("Enter road ID to close (for example, R7): ");
-                    String closureRoad = scanner.nextLine();
+                    System.out.println("1. Close road");
+                    System.out.println("2. Open road");
+                    System.out.print("Choose road action: ");
+                    int roadAction = scanner.nextInt();
+                    scanner.nextLine();
 
-                                        if (!controller.hasRoad(closureRoad)) {
-                                                controller.reportInvalidRoadId(closureRoad);
-                                                break;
-                                        }
+                    if (roadAction != 1 && roadAction != 2) {
+                        System.out.println("Choose 1 to close or 2 to open a road.");
+                        break;
+                    }
 
-                    int closureArrivalOrder = ++eventArrivalCounter;
-                    String closureId = "EV-" + closureArrivalOrder;
+                    System.out.print("Enter road ID (for example, R7): ");
+                    String statusRoad = scanner.nextLine();
 
-                    ClosureEvent closureEvent =
-                            new ClosureEvent(
-                                    closureId,
-                                    closureRoad,
-                                    closureArrivalOrder
-                            );
+                    if (!controller.hasRoad(statusRoad)) {
+                        controller.reportInvalidRoadId(statusRoad);
+                        break;
+                    }
 
-                    controller.addTrafficEvent(
-                            closureEvent);
+                    int statusArrivalOrder = ++eventArrivalCounter;
+                    String statusEventId = "EV-" + statusArrivalOrder;
+
+                    TrafficEvent roadStatusEvent;
+                    if (roadAction == 1) {
+                        roadStatusEvent = new ClosureEvent(
+                                statusEventId, statusRoad, statusArrivalOrder);
+                    } else {
+                        roadStatusEvent = new OpenRoadEvent(
+                                statusEventId, statusRoad, statusArrivalOrder);
+                    }
+
+                    controller.addTrafficEvent(roadStatusEvent);
 
                     break;
 

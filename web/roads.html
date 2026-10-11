@@ -44,16 +44,23 @@
                     <span class="heading-icon orange">⌁</span>
                 </div>
                 <form method="post" action="/events/add">
-                    <label for="event-type">Event type</label>
-                    <select id="event-type" name="type">
-                        <option value="congestion">Congestion update</option>
-                        <option value="closure">Road closure</option>
-                    </select>
+                    <h3 class="event-form-title">Congestion update</h3>
                     <label for="road-select">Road segment</label>
                     <select id="road-select" name="roadId" required>{{ROAD_OPTIONS}}</select>
                     <label for="travel-time">New travel time (minutes)</label>
                     <input id="travel-time" name="travelTime" type="number" min="1" value="12">
-                    <button class="button button-primary" type="submit">Add event to queue <span>+</span></button>
+                    <button class="button button-primary" type="submit">Queue congestion update <span>+</span></button>
+                </form>
+                <form method="post" action="/events/status" class="road-status-form">
+                    <h3 class="event-form-title">Road status</h3>
+                    <label for="road-status">Action</label>
+                    <select id="road-status" name="status" required>
+                        <option value="close">Close road</option>
+                        <option value="open">Open road</option>
+                    </select>
+                    <label for="status-road-select">Road segment</label>
+                    <select id="status-road-select" name="roadId" required>{{ROAD_OPTIONS}}</select>
+                    <button class="button button-secondary" type="submit">Queue road status change</button>
                 </form>
                 <div class="event-queue-info">
                     <span class="priority-badge high">{{PENDING_EVENTS}}</span>
