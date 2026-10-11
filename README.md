@@ -1,24 +1,55 @@
 # VegamTraffic
 
-VegamTraffic is a small Java traffic-control simulation with a browser dashboard. It uses an in-memory, directed road network and sample emergency vehicles; it does not need a database, external API, or third-party Java library.
+VegamTraffic is a small Java traffic-control simulation with a browser dashboard. It uses an in-memory, directed road network and sample emergency vehicles. The website uses MySQL to save user accounts, vehicle positions, routing requests, and processed routes.
 
-## Run the website
+## Connect MySQL and run the website
 
-From the project folder, compile and start the local web server:
+1. Install MySQL Server and start it.
+2. In MySQL Workbench, create the project database:
 
-```text
+   ```sql
+   CREATE DATABASE vegam_traffic;
+   ```
+
+3. Download the **Platform Independent ZIP** for MySQL Connector/J and copy its
+   `mysql-connector-j-*.jar` file into the project's `lib` folder. The driver
+   JAR is not committed to Git.
+4. Create `db.properties` from the example and enter your local MySQL password:
+
+   ```powershell
+   Copy-Item db.properties.example db.properties
+   ```
+
+   `db.properties` is ignored by Git. Never commit your database password.
+   You can also override these settings with `VEGAM_DB_URL`, `VEGAM_DB_USER`,
+   and `VEGAM_DB_PASSWORD` environment variables.
+5. From the project folder, compile and run the website:
+
+   ```powershell
+   javac -d out src\*.java
+   java -cp "out;lib\*" Main --web
+   ```
+
+The application creates its tables the first time it connects. Open
+[http://localhost:8080](http://localhost:8080). Stop the server with `Ctrl+C`.
+Accounts, vehicle positions, pending requests, and processed route results
+remain in MySQL when the server restarts. Log in again after a restart because
+web sessions are kept in memory. The road network and traffic event simulation
+are still reset when the Java program restarts.
+
+To run the original menu-driven console program (which does not use the
+database):
+
+```powershell
 javac -d out src\*.java
-java -cp out Main --web
+java -cp out Main
 ```
-
-Open [http://localhost:8080](http://localhost:8080). Stop the server with `Ctrl+C`. The dashboard binds to the local computer and simulation changes reset when the program is restarted.
 
 On first use, create the traffic-controller account. After that, registration
 offers a choice between another traffic-controller account and an emergency
 vehicle account. Each emergency vehicle can be registered to one account.
-Accounts and login sessions are held in memory and reset when the server stops;
-passwords are hashed, but this local classroom demo is not production
-authentication.
+Passwords are hashed before they are stored. This local classroom demo is not
+production authentication.
 
 Controllers can view and process requests and manage road events.
 Emergency-vehicle accounts can only submit requests for their assigned vehicle;
@@ -32,12 +63,6 @@ After processing route requests, the Dispatcher page shows a route map image:
 the selected directed roads and junctions are highlighted, alongside the
 request's priority, arrival time, and calculated travel time. Unreachable
 requests are shown as such instead of drawing a route.
-
-To run the original menu-driven console program instead:
-
-```text
-java -cp out Main
-```
 
 ## Emergency dispatcher
 

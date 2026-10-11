@@ -68,6 +68,10 @@ public class TrafficController {
         return routes;
     }
 
+    public void restoreProcessedRoute(ProcessedRoute processedRoute) {
+        processedRouteHistory.add(processedRoute);
+    }
+
     public String getVehiclePosition(String vehicleId) {
         EmergencyVehicle vehicle = vehicles.get(vehicleId);
         return vehicle == null ? null : vehicle.getCurrentJunction();

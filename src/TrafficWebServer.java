@@ -8,6 +8,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.sql.SQLException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -28,6 +29,7 @@ public class TrafficWebServer {
     private static final int PASSWORD_KEY_LENGTH = 256;
 
     private final TrafficController controller;
+    private final DatabaseStore database;
     private final Map<String, Account> accounts = new HashMap<>();
     private final Map<String, UserSession> sessions = new HashMap<>();
     private final SecureRandom random = new SecureRandom();
@@ -38,17 +40,55 @@ public class TrafficWebServer {
     private List<String> noticeDetails = Collections.emptyList();
     private UserSession activeSession;
 
-    private TrafficWebServer(TrafficController controller) {
+    private TrafficWebServer(TrafficController controller, DatabaseStore database) {
         this.controller = controller;
+        this.database = database;
     }
 
     public static void start(TrafficController controller) throws IOException {
+        DatabaseStore database = new DatabaseStore();
+        try {
+            database.initialize(controller);
+        } catch (SQLException exception) {
+            throw new IOException("Could not connect to MySQL. Check db.properties, "
+                    + "start MySQL, and create the vegam_traffic database.", exception);
+        }
         HttpServer server = HttpServer.create(
                 new InetSocketAddress("127.0.0.1", 8080), 0);
-        TrafficWebServer webServer = new TrafficWebServer(controller);
+        TrafficWebServer webServer = new TrafficWebServer(controller, database);
+        try {
+            webServer.loadDatabaseState();
+        } catch (SQLException exception) {
+            throw new IOException("Could not load VegamTraffic data from MySQL.", exception);
+        }
         server.createContext("/", webServer::handleRequest);
         server.start();
-        System.out.println("VegamTraffic is running at http://localhost:8080");
+        System.out.println("VegamTraffic is running at http://localhost:8080 "
+                + "with MySQL connected.");
+    }
+
+    private void loadDatabaseState() throws SQLException {
+        for (Map.Entry<String, String> position : database.loadVehiclePositions().entrySet()) {
+            if (!controller.setVehiclePosition(position.getKey(), position.getValue())) {
+                throw new SQLException("Saved position is invalid for vehicle "
+                        + position.getKey() + ".");
+            }
+        }
+        for (DatabaseStore.AccountRecord record : database.loadAccounts()) {
+            Account account = new Account(record.username, record.role, record.vehicleId,
+                    record.salt, record.passwordHash);
+            accounts.put(record.username.toLowerCase(Locale.ROOT), account);
+        }
+        for (RoutingRequest request : database.loadPendingRequests()) {
+            if (!controller.addRoutingRequest(request)) {
+                throw new SQLException("Could not restore pending request "
+                        + request.getRequestId() + ".");
+            }
+        }
+        for (ProcessedRoute route : database.loadProcessedRoutes()) {
+            controller.restoreProcessedRoute(route);
+        }
+        requestArrivalOrder = database.getLargestArrivalOrder();
     }
 
     private synchronized void handleRequest(HttpExchange exchange) throws IOException {
@@ -247,6 +287,14 @@ public class TrafficWebServer {
         byte[] passwordHash = hashPassword(password.toCharArray(), salt);
         Account account = new Account(username, role,
                 role.equals(VEHICLE) ? vehicleId : null, salt, passwordHash);
+        try {
+            database.saveAccount(account.username, account.role, account.vehicleId,
+                    account.salt, account.passwordHash);
+        } catch (SQLException exception) {
+            reportDatabaseError("save account", exception);
+            serveAuthPage(exchange, "register.html");
+            return;
+        }
         accounts.put(key, account);
         createSession(exchange, account);
         redirect(exchange, homeFor(account));
@@ -457,7 +505,7 @@ public class TrafficWebServer {
                     throw new IllegalArgumentException(
                             "No available vehicle of the selected type.");
                 }
-                if (controller.addRoutingRequest(request)) {
+                if (saveAndQueueRequest(request)) {
                     requestArrivalOrder = order;
                     setNotice(vehicleType + " request added as "
                                     + request.getSeverity() + " priority.",
@@ -468,6 +516,8 @@ public class TrafficWebServer {
                 }
             } catch (IllegalArgumentException exception) {
                 setNotice(exception.getMessage(), Collections.emptyList(), true);
+            } catch (SQLException exception) {
+                reportDatabaseError("save routing request", exception);
             }
         }
     }
@@ -512,7 +562,7 @@ public class TrafficWebServer {
                 RoutingRequest request = new RoutingRequest("REQ-" + order,
                         vehicle.getVehicleId(), source, destination, severity, order,
                         vehicleType, description.trim());
-                if (!controller.addRoutingRequest(request)) {
+                if (!saveAndQueueRequest(request)) {
                     throw new IllegalArgumentException(
                             "The traffic controller rejected the routing request.");
                 }
@@ -522,8 +572,19 @@ public class TrafficWebServer {
                         Collections.emptyList(), false);
             } catch (IllegalArgumentException exception) {
                 setNotice(exception.getMessage(), Collections.emptyList(), true);
+            } catch (SQLException exception) {
+                reportDatabaseError("save routing request", exception);
             }
         }
+    }
+
+    private boolean saveAndQueueRequest(RoutingRequest request) throws SQLException {
+        database.saveRoutingRequest(request);
+        if (controller.addRoutingRequest(request)) {
+            return true;
+        }
+        database.deleteRoutingRequest(request.getRequestId());
+        return false;
     }
 
     private String getDispatcherType(String vehicleModelType) {
@@ -542,12 +603,26 @@ public class TrafficWebServer {
     private void processRouteRequests() {
         synchronized (controller) {
             List<String> results = controller.processRoutingRequests();
+            try {
+                database.saveProcessedRoutes(controller.getLastProcessedRoutes());
+            } catch (SQLException exception) {
+                reportDatabaseError("save processed routes", exception);
+                return;
+            }
             String message = results.size() == 1
                     && results.get(0).startsWith("No routing requests")
                     ? results.get(0)
                     : "Routing requests processed by severity, then arrival order.";
             setNotice(message, results, false);
         }
+    }
+
+    private void reportDatabaseError(String action, SQLException exception) {
+        System.err.println("MySQL error while attempting to " + action + ": "
+                + exception.getMessage());
+        setNotice("Could not " + action + " in MySQL. Check the server output and database "
+                        + "connection settings.",
+                Collections.emptyList(), true);
     }
 
     private void updateVehiclePosition(Map<String, String> form) {
@@ -563,9 +638,14 @@ public class TrafficWebServer {
                 setNotice("Select a valid junction.", Collections.emptyList(), true);
                 return;
             }
-            controller.setVehiclePosition(vehicleId, junction);
-            setNotice("Emergency vehicle location updated.",
-                    Collections.emptyList(), false);
+            try {
+                database.updateVehiclePosition(vehicleId, junction);
+                controller.setVehiclePosition(vehicleId, junction);
+                setNotice("Emergency vehicle location updated.",
+                        Collections.emptyList(), false);
+            } catch (SQLException exception) {
+                reportDatabaseError("update vehicle position", exception);
+            }
         }
     }
 

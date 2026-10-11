@@ -25,6 +25,13 @@ public class RoutingRequest implements Comparable<RoutingRequest> {
     public RoutingRequest(String requestId, String vehicleId, String source,
                           String destination, String severity, int arrivalOrder,
                           String vehicleType, String description) {
+        this(requestId, vehicleId, source, destination, severity, arrivalOrder,
+                vehicleType, description, LocalDateTime.now());
+    }
+
+    public RoutingRequest(String requestId, String vehicleId, String source,
+                          String destination, String severity, int arrivalOrder,
+                          String vehicleType, String description, LocalDateTime requestedAt) {
         this.requestId = requestId;
         this.vehicleId = vehicleId;
         this.source = source;
@@ -33,7 +40,7 @@ public class RoutingRequest implements Comparable<RoutingRequest> {
         this.arrivalOrder = arrivalOrder;
         this.vehicleType = vehicleType;
         this.description = description;
-        this.requestedAt = LocalDateTime.now();
+        this.requestedAt = requestedAt;
     }
 
     public String getRequestId() {

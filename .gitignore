@@ -1,2 +1,5 @@
 out/
+target/
 *.class
+db.properties
+lib/*.jar

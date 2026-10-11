@@ -1,0 +1,3 @@
+url=jdbc:mysql://localhost:3306/vegam_traffic?allowPublicKeyRetrieval=true&useSSL=false
+username=root
+password=replace-with-your-local-mysql-password
