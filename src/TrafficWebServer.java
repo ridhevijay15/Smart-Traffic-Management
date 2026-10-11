@@ -201,6 +201,7 @@ public class TrafficWebServer {
     private void register(HttpExchange exchange, Map<String, String> form) throws IOException {
         String username = form.get("username");
         String password = form.get("password");
+        String requestedRole = form.get("role");
         String vehicleId = form.get("vehicleId");
         if (username == null || !username.matches("[A-Za-z0-9_-]{3,24}")) {
             setNotice("Use a username with 3–24 letters, numbers, underscores, or hyphens.",
@@ -224,9 +225,9 @@ public class TrafficWebServer {
         }
 
         String role;
-        if (!hasControllerAccount()) {
+        if (CONTROLLER.equals(requestedRole)) {
             role = CONTROLLER;
-        } else {
+        } else if (VEHICLE.equals(requestedRole) && hasControllerAccount()) {
             role = VEHICLE;
             if (getVehicle(vehicleId) == null || isVehicleRegistered(vehicleId)) {
                 setNotice("Select an emergency vehicle that has not been registered yet.",
@@ -234,12 +235,18 @@ public class TrafficWebServer {
                 serveAuthPage(exchange, "register.html");
                 return;
             }
+        } else {
+            setNotice("Choose a valid account type. The first account must be a traffic controller.",
+                    Collections.emptyList(), true);
+            serveAuthPage(exchange, "register.html");
+            return;
         }
 
         byte[] salt = new byte[16];
         random.nextBytes(salt);
         byte[] passwordHash = hashPassword(password.toCharArray(), salt);
-        Account account = new Account(username, role, vehicleId, salt, passwordHash);
+        Account account = new Account(username, role,
+                role.equals(VEHICLE) ? vehicleId : null, salt, passwordHash);
         accounts.put(key, account);
         createSession(exchange, account);
         redirect(exchange, homeFor(account));
@@ -358,13 +365,11 @@ public class TrafficWebServer {
             String page = new String(Files.readAllBytes(Paths.get("web", fileName)),
                     StandardCharsets.UTF_8);
             page = page.replace("{{NOTICE}}", renderNotice())
-                    .replace("{{REGISTER_TITLE}}", hasControllerAccount()
-                            ? "Register an emergency vehicle"
-                            : "Register the traffic controller")
+                    .replace("{{REGISTER_TITLE}}", "Create an account")
                     .replace("{{REGISTER_HELP}}", hasControllerAccount()
-                            ? "Create an account for an emergency vehicle."
+                            ? "Choose Traffic Controller or register an emergency vehicle."
                             : "Create the traffic controller account first.")
-                    .replace("{{VEHICLE_ACCOUNT_FIELD}}", renderVehicleAccountField());
+                    .replace("{{ACCOUNT_FIELDS}}", renderAccountFields());
             sendHtml(exchange, 200, page);
         } catch (IOException exception) {
             sendHtml(exchange, 500, "<h1>Could not read web/"
@@ -372,10 +377,8 @@ public class TrafficWebServer {
         }
     }
 
-    private String renderVehicleAccountField() {
-        if (!hasControllerAccount()) {
-            return "";
-        }
+    private String renderAccountFields() {
+        boolean controllerExists = hasControllerAccount();
         StringBuilder options = new StringBuilder();
         for (EmergencyVehicle vehicle : controller.getVehicles()) {
             if (!isVehicleRegistered(vehicle.getVehicleId())) {
@@ -385,12 +388,23 @@ public class TrafficWebServer {
                         .append(escapeHtml(vehicle.getType())).append("</option>");
             }
         }
-        if (options.length() == 0) {
-            return "<p class=\"helper-text\">All emergency vehicles already have accounts.</p>";
+        String roleOptions = "<option value=\"" + CONTROLLER + "\">Traffic Controller</option>";
+        if (controllerExists && options.length() > 0) {
+            roleOptions += "<option value=\"" + VEHICLE + "\">Emergency Vehicle</option>";
         }
-        return "<label for=\"vehicle-id\">Emergency vehicle</label>"
-                + "<select id=\"vehicle-id\" name=\"vehicleId\" required>"
-                + options + "</select>";
+        String accountFields = "<label for=\"account-type\">Account type</label>"
+                + "<select id=\"account-type\" name=\"role\" required>" + roleOptions + "</select>";
+        if (!controllerExists) {
+            return accountFields;
+        }
+        String vehicleOptions = "<option value=\"\">Select a vehicle</option>" + options;
+        String helperText = options.length() == 0
+                ? "All emergency vehicles already have accounts."
+                : "Required only when registering an emergency vehicle.";
+        return accountFields
+                + "<label for=\"vehicle-id\">Emergency vehicle</label>"
+                + "<select id=\"vehicle-id\" name=\"vehicleId\">" + vehicleOptions + "</select>"
+                + "<p class=\"helper-text\">" + helperText + "</p>";
     }
 
     private void serveVehicleRequestPage(HttpExchange exchange) throws IOException {

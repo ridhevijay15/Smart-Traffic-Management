@@ -13,15 +13,16 @@ java -cp out Main --web
 
 Open [http://localhost:8080](http://localhost:8080). Stop the server with `Ctrl+C`. The dashboard binds to the local computer and simulation changes reset when the program is restarted.
 
-On first use, create the traffic-controller account. Then register an account
-for each emergency vehicle. Accounts and login sessions are held in memory and
-reset when the server stops; passwords are hashed, but this local classroom
-demo is not production authentication.
+On first use, create the traffic-controller account. After that, registration
+offers a choice between another traffic-controller account and an emergency
+vehicle account. Each emergency vehicle can be registered to one account.
+Accounts and login sessions are held in memory and reset when the server stops;
+passwords are hashed, but this local classroom demo is not production
+authentication.
 
-The first account is the traffic controller. After that, each emergency vehicle
-can be registered to one account. Controllers can view and process requests
-and manage road events. Emergency-vehicle accounts can only submit requests for
-their assigned vehicle; they can choose a starting junction and destination.
+Controllers can view and process requests and manage road events.
+Emergency-vehicle accounts can only submit requests for their assigned vehicle;
+they can choose a starting junction and destination.
 After the controller processes a request, its route map, junction sequence,
 and travel time appear in the vehicle's portal.
 
