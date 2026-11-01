@@ -44,11 +44,41 @@ public class DatabaseStore {
                     + "request_id VARCHAR(30) PRIMARY KEY, "
                     + "route_path TEXT NOT NULL, "
                     + "travel_time INT NOT NULL, "
+                    + "alternative_path TEXT NULL, "
+                    + "alternative_time INT NULL, "
+                    + "current_step INT NOT NULL DEFAULT 0, "
                     + "processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
                     + "CONSTRAINT fk_processed_request FOREIGN KEY (request_id) "
                     + "REFERENCES routing_requests(request_id))");
+            statement.executeUpdate("CREATE TABLE IF NOT EXISTS traffic_event_history ("
+                    + "event_id VARCHAR(30) PRIMARY KEY, "
+                    + "road_id VARCHAR(20) NOT NULL, "
+                    + "event_type VARCHAR(30) NOT NULL, "
+                    + "description TEXT NOT NULL, "
+                    + "arrival_order INT NOT NULL, "
+                    + "processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+            ensureColumn(connection, "processed_routes", "alternative_path", "TEXT NULL");
+            ensureColumn(connection, "processed_routes", "alternative_time", "INT NULL");
+            ensureColumn(connection, "processed_routes", "current_step",
+                    "INT NOT NULL DEFAULT 0");
+            statement.executeUpdate("UPDATE routing_requests SET status = 'COMPLETED' "
+                    + "WHERE status = 'PROCESSED'");
         }
         saveInitialVehicles(controller.getVehicles());
+    }
+
+    private void ensureColumn(Connection connection, String table, String column,
+                              String definition) throws SQLException {
+        try (ResultSet columns = connection.getMetaData().getColumns(
+                connection.getCatalog(), null, table, column)) {
+            if (columns.next()) {
+                return;
+            }
+        }
+        try (java.sql.Statement statement = connection.createStatement()) {
+            statement.executeUpdate("ALTER TABLE " + table + " ADD COLUMN "
+                    + column + " " + definition);
+        }
     }
 
     private void saveInitialVehicles(List<EmergencyVehicle> vehicles) throws SQLException {
@@ -159,11 +189,12 @@ public class DatabaseStore {
 
     public List<ProcessedRoute> loadProcessedRoutes() throws SQLException {
         List<ProcessedRoute> routes = new ArrayList<>();
-        String sql = "SELECT r.*, v.vehicle_type, p.route_path, p.travel_time "
+        String sql = "SELECT r.*, v.vehicle_type, p.route_path, p.travel_time, "
+                + "p.alternative_path, p.alternative_time, p.current_step "
                 + "FROM routing_requests r "
                 + "JOIN vehicles v ON v.vehicle_id = r.vehicle_id "
                 + "LEFT JOIN processed_routes p ON p.request_id = r.request_id "
-                + "WHERE r.status = 'PROCESSED' "
+                + "WHERE r.status <> 'PENDING' "
                 + "ORDER BY arrival_order";
         try (Connection connection = DatabaseConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql);
@@ -174,7 +205,12 @@ public class DatabaseStore {
                 Route route = routePath == null || routePath.isEmpty() ? null
                         : new Route(Arrays.asList(routePath.split(",")),
                                 results.getInt("travel_time"));
-                routes.add(new ProcessedRoute(request, route));
+                String alternativePath = results.getString("alternative_path");
+                Route alternative = alternativePath == null || alternativePath.isEmpty()
+                        ? null : new Route(Arrays.asList(alternativePath.split(",")),
+                                results.getInt("alternative_time"));
+                routes.add(new ProcessedRoute(request, route, alternative,
+                        results.getInt("current_step")));
             }
         }
         return routes;
@@ -200,11 +236,13 @@ public class DatabaseStore {
         } else if ("Police Vehicle".equalsIgnoreCase(vehicleType)) {
             vehicleType = DispatcherRequestFactory.POLICE;
         }
-        return new RoutingRequest(results.getString("request_id"),
+        RoutingRequest request = new RoutingRequest(results.getString("request_id"),
                 results.getString("vehicle_id"), results.getString("source_junction"),
                 results.getString("destination_junction"), results.getString("severity"),
                 results.getInt("arrival_order"), vehicleType,
                 results.getString("description"), requestedAt.toLocalDateTime());
+        request.setStatus(results.getString("status"));
+        return request;
     }
 
     public Map<String, String> loadVehiclePositions() throws SQLException {
@@ -232,13 +270,18 @@ public class DatabaseStore {
         }
     }
 
-    public void saveProcessedRoutes(List<ProcessedRoute> routes) throws SQLException {
-        String sql = "UPDATE routing_requests SET source_junction = ?, "
-                + "status = 'PROCESSED' WHERE request_id = ?";
+    public void saveProcessedRoutes(List<ProcessedRoute> routes,
+                                   List<EmergencyVehicle> vehicles) throws SQLException {
+        String sql = "UPDATE routing_requests SET source_junction = ?, status = ? "
+                + "WHERE request_id = ?";
         String routeSql = "INSERT INTO processed_routes "
-                + "(request_id, route_path, travel_time) VALUES (?, ?, ?) "
+                + "(request_id, route_path, travel_time, alternative_path, "
+                + "alternative_time, current_step) VALUES (?, ?, ?, ?, ?, ?) "
                 + "ON DUPLICATE KEY UPDATE route_path = VALUES(route_path), "
-                + "travel_time = VALUES(travel_time), processed_at = CURRENT_TIMESTAMP";
+                + "travel_time = VALUES(travel_time), "
+                + "alternative_path = VALUES(alternative_path), "
+                + "alternative_time = VALUES(alternative_time), "
+                + "current_step = VALUES(current_step), processed_at = CURRENT_TIMESTAMP";
         try (Connection connection = DatabaseConnection.getConnection()) {
             connection.setAutoCommit(false);
             try (PreparedStatement statement = connection.prepareStatement(sql);
@@ -249,21 +292,31 @@ public class DatabaseStore {
                     RoutingRequest request = processed.getRequest();
                     Route route = processed.getRoute();
                     statement.setString(1, request.getSource());
-                    statement.setString(2, request.getRequestId());
+                    statement.setString(2, request.getStatus());
+                    statement.setString(3, request.getRequestId());
                     statement.addBatch();
                     routeStatement.setString(1, request.getRequestId());
                     routeStatement.setString(2, route == null ? ""
                             : String.join(",", route.getJunctions()));
                     routeStatement.setInt(3, route == null ? 0 : route.getTotalTravelTime());
-                    routeStatement.addBatch();
-                    if (route != null) {
-                        vehicleStatement.setString(1, request.getDestination());
-                        vehicleStatement.setString(2, request.getVehicleId());
-                        vehicleStatement.addBatch();
+                    Route alternative = processed.getAlternativeRoute();
+                    routeStatement.setString(4, alternative == null ? ""
+                            : String.join(",", alternative.getJunctions()));
+                    if (alternative == null) {
+                        routeStatement.setNull(5, java.sql.Types.INTEGER);
+                    } else {
+                        routeStatement.setInt(5, alternative.getTotalTravelTime());
                     }
+                    routeStatement.setInt(6, processed.getCurrentStep());
+                    routeStatement.addBatch();
                 }
                 statement.executeBatch();
                 routeStatement.executeBatch();
+                for (EmergencyVehicle vehicle : vehicles) {
+                    vehicleStatement.setString(1, vehicle.getCurrentJunction());
+                    vehicleStatement.setString(2, vehicle.getVehicleId());
+                    vehicleStatement.addBatch();
+                }
                 vehicleStatement.executeBatch();
                 connection.commit();
             } catch (SQLException exception) {
@@ -272,6 +325,50 @@ public class DatabaseStore {
             } finally {
                 connection.setAutoCommit(true);
             }
+        }
+    }
+
+    public void saveTrafficEventHistory(List<TrafficEvent> events) throws SQLException {
+        String sql = "INSERT IGNORE INTO traffic_event_history "
+                + "(event_id, road_id, event_type, description, arrival_order) "
+                + "VALUES (?, ?, ?, ?, ?)";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (TrafficEvent event : events) {
+                statement.setString(1, event.getEventId());
+                statement.setString(2, event.getRoadId());
+                statement.setString(3, event.getClass().getSimpleName());
+                statement.setString(4, event.getDescription());
+                statement.setInt(5, event.getArrivalOrder());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    public List<String> loadTrafficEventHistory() throws SQLException {
+        List<String> events = new ArrayList<>();
+        String sql = "SELECT event_id, description, processed_at "
+                + "FROM traffic_event_history ORDER BY arrival_order";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet results = statement.executeQuery()) {
+            while (results.next()) {
+                events.add(results.getString("event_id") + " · "
+                        + results.getString("description") + " · "
+                        + results.getTimestamp("processed_at"));
+            }
+        }
+        return events;
+    }
+
+    public int getLargestEventArrivalOrder() throws SQLException {
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COALESCE(MAX(arrival_order), 0) FROM traffic_event_history");
+             ResultSet results = statement.executeQuery()) {
+            results.next();
+            return results.getInt(1);
         }
     }
 

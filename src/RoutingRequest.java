@@ -15,6 +15,7 @@ public class RoutingRequest implements Comparable<RoutingRequest> {
     private String vehicleType;
     private String description;
     private LocalDateTime requestedAt;
+    private String status;
 
     public RoutingRequest(String requestId, String vehicleId, String source,
                           String destination, String severity, int arrivalOrder) {
@@ -41,6 +42,7 @@ public class RoutingRequest implements Comparable<RoutingRequest> {
         this.vehicleType = vehicleType;
         this.description = description;
         this.requestedAt = requestedAt;
+        this.status = "PENDING";
     }
 
     public String getRequestId() {
@@ -77,6 +79,14 @@ public class RoutingRequest implements Comparable<RoutingRequest> {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public LocalDateTime getRequestedAt() {

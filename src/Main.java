@@ -50,6 +50,8 @@ public class Main {
             System.out.println("8. Display Road Status");
             System.out.println("9. Create Dispatcher Request (console)");
             System.out.println("10. Open Dispatcher Window (GUI)");
+            System.out.println("11. Advance a trip by one junction");
+            System.out.println("12. Select a route alternative");
             System.out.println("0. Exit");
 
             System.out.print("\nEnter choice: ");
@@ -135,7 +137,6 @@ public class Main {
                 case 4:
 
                     controller.processRoutingRequests();
-
                     break;
 
                 // ==================================
@@ -243,6 +244,28 @@ public class Main {
                 case 10:
 
                     DispatcherInterface.showGui(controller);
+
+                    break;
+
+                case 11:
+
+                    System.out.print("Enter routing request ID: ");
+                    System.out.println(controller.advanceTrip(scanner.nextLine()));
+
+                    break;
+
+                case 12:
+
+                    System.out.print("Enter routing request ID: ");
+                    String routeRequestId = scanner.nextLine();
+                    System.out.print("Choose route 1 (fastest) or 2 (alternative): ");
+                    int routeChoice = scanner.nextInt();
+                    scanner.nextLine();
+                    if (controller.selectRoute(routeRequestId, routeChoice)) {
+                        System.out.println("Route selected.");
+                    } else {
+                        System.out.println("That request has no selectable route option.");
+                    }
 
                     break;
 

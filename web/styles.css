@@ -74,6 +74,15 @@ textarea:focus { border-color: #49a98a; box-shadow: 0 0 0 3px #49a98a1d; }
 .button:hover { opacity: .9; transform: translateY(-1px); }.button:disabled { cursor: wait; opacity: .55; }
 .button-primary { background: #168e6d; color: white; }.button-dark { background: #203948; color: white; }.button-secondary { background: white; border: 1px solid #e4e9ec; color: #586c79; justify-content: center; margin-top: 7px; }
 .helper-text { color: #94a0a8; font-size: 9px; line-height: 1.5; margin: 9px 0 0; }
+.request-status { border-radius: 12px; display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: .45px; margin: 5px 0; padding: 5px 8px; }
+.status-pending,.status-route-ready { background: #fff5df; color: #a36b11; }
+.status-route-selected,.status-in-progress { background: #e8f2fb; color: #3b78a5; }
+.status-completed { background: #e8f5ef; color: #228b68; }
+.status-unreachable { background: #fff0ed; color: #c94f42; }
+.route-alternative { background: #f5f8fa; border-radius: 6px; color: #5c6e7a; font-size: 10px; line-height: 1.6; margin: 8px 0; padding: 9px; }
+.trip-control { border-top: 1px solid #edf0f2; margin-top: 9px; padding-top: 5px; }
+.event-history-panel { margin-top: 16px; }
+.event-history-list { color: #536875; font-size: 10px; line-height: 1.7; margin: 0; padding-left: 18px; }
 .form-panel { padding: 17px 18px; }.form-panel .panel-heading { margin-bottom: 10px; }
 .events-panel form { margin-top: 0; }
 .position-form { border-top: 1px solid #edf0f2; margin-top: 15px; padding-top: 3px; }

@@ -18,7 +18,7 @@ The simulation uses synthetic city data and manually entered updates. It does no
 | Manually enter vehicle positions, destinations, closures, and congestion updates | Available through the controller's Vehicles, Dispatcher, and Roads & Events pages. The console also supports simulation operations. |
 | Apply traffic events FIFO before the next route calculation | Congestion and open/close events are queued and applied before route requests are calculated. |
 | Recalculate from the vehicle's current simulated junction and report unreachable destinations | Routing uses the current vehicle position and open roads. Unreachable requests are reported instead of displaying a route. |
-| Demonstrate closure during travel, equal-severity requests, unreachable routes, and reversed one-way access | Equal-severity ordering, unreachable destinations, and directed-road behavior can be demonstrated. Vehicle movement is simulated as a completed route, not continuous travel, so a closure cannot interrupt a vehicle mid-route; applying a closure before processing demonstrates its effect on the next route calculation. |
+| Demonstrate closure during travel, equal-severity requests, unreachable routes, and reversed one-way access | Vehicle trips advance one junction at a time; queued road updates apply before each step, and a closure causes a new route to be calculated from the vehicle's current junction. Equal-severity ordering, unreachable destinations, and directed-road behavior can also be demonstrated. Movement is simulated, not continuous or GPS-tracked. |
 
 ## Connect MySQL and run the website
 
@@ -84,6 +84,14 @@ the selected directed roads and junctions are highlighted, alongside the
 request's priority, arrival time, and calculated travel time. Unreachable
 requests are shown as such instead of drawing a route.
 
+The controller can review a fastest route and its next-best alternative,
+select a route, and advance a trip one junction at a time. Traffic events
+waiting in the FIFO queue are applied before each trip step. If an event closes
+the next road, the system recalculates from the vehicle's current junction.
+Request status and trip progress are visible to the controller and the assigned
+vehicle account. Processed request and applied traffic-event history is stored
+in MySQL.
+
 ## Emergency dispatcher
 
 Emergency vehicle accounts choose a situation, starting junction, destination,
@@ -95,7 +103,9 @@ Critical, High, then Normal, with arrival order breaking ties. Each request also
 records and displays its local date and time alongside its arrival number.
 
 The console menu also includes `9. Create Dispatcher Request (console)` and
-`10. Open Dispatcher Window (GUI)`. To open either directly:
+`10. Open Dispatcher Window (GUI)`. Options 11 and 12 advance a trip one
+junction at a time and select the fastest or alternative route. To open either
+dispatcher directly:
 
 ```text
 java -cp out Main --dispatcher-console
@@ -133,6 +143,8 @@ controller.addRoutingRequest(request);
 - A priority queue orders route requests by severity and then arrival order.
 - Congestion, road-close, and road-open updates wait in a FIFO queue and are applied before the next route calculation.
 - Dijkstra's algorithm finds the fastest route through open roads; unreachable destinations are reported.
+- The dispatcher can compare the fastest route with a next-best alternative, select a route, and advance a simulated trip step by step with rerouting after closures.
+- Request statuses and applied traffic-event history are available in the web portals and persisted in MySQL.
 - Processed routes are shown as server-rendered SVG maps; no browser scripting is needed.
 - The dashboard displays current road times and closures, vehicle locations, queue sizes, and route results.
 
@@ -151,10 +163,10 @@ These structures fit the simulation's needs: graph traversal supports directed r
 - **Working Java application and source code:** included in `src`.
 - **Problem analysis, assumptions, and processing rules:** summarized above and in the sections below.
 - **Data-structure and algorithm justification:** summarized above and in Java concepts below.
-- **Sample input and test results:** use the demo steps below as manual scenarios. No automated test suite or recorded test-results document is currently included.
+- **Sample input and test results:** `tests/TrafficWorkflowTest.java` covers alternative-route ordering, controller-approved trip movement, rerouting after a mid-trip closure, and unreachable requests. Run it with the commands below; a separate recorded test-results report is not included.
 - **UML class diagram and screenshot-based project report:** not currently included in the repository; add them separately if they are required for submission.
 
-For a manual demonstration, include normal routing, equal-severity requests to show arrival-order tie-breaking, a closure or congestion event applied before route processing, an unreachable destination after closing needed roads, and a one-way route attempt in each direction.
+For a manual demonstration, include normal routing, equal-severity requests to show arrival-order tie-breaking, a closure event while a stepwise trip is in progress, an unreachable destination after closing needed roads, and a one-way route attempt in each direction.
 
 ## Java concepts used
 
@@ -164,9 +176,21 @@ For a manual demonstration, include normal routing, equal-severity requests to s
 - `HashMap` stores vehicles, requests, and roads; `PriorityQueue` orders route requests and supports Dijkstra's min-heap; and `ArrayDeque` processes traffic events in arrival order.
 - Dijkstra's algorithm uses a `PriorityQueue` to search the directed, weighted graph.
 
-**Future enhancements:** add automated tests and recorded test results, create the required UML diagram and project report, and optionally persist road and traffic-event state across server restarts. Continuous travel and mid-route rerouting would require a time-stepped vehicle simulation and are outside the current model.
+**Future enhancements:** expand automated coverage and record test results, create the required UML diagram and project report, and optionally persist the active road network and traffic-event state across server restarts. Continuous GPS-based travel remains outside the current model.
 
 The website uses plain HTML forms and CSS. The built-in Java HTTP server renders the dashboard and processes form submissions using the same simulation classes as the console application. No JavaScript or third-party web framework is used.
+
+## Run workflow tests
+
+The focused workflow tests cover alternative route ordering, controller-approved
+trip movement, rerouting after a mid-trip road closure, and unreachable
+requests:
+
+```powershell
+javac -encoding UTF-8 -d out src\*.java
+javac -encoding UTF-8 -cp out -d out tests\TrafficWorkflowTest.java
+java -cp out TrafficWorkflowTest
+```
 
 ## Try a demo
 

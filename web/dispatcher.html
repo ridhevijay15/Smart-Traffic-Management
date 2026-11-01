@@ -50,7 +50,7 @@
                     </ol>
                     <p class="helper-text">Within the same priority, requests are processed in arrival order.</p>
                     <form method="post" action="/routes/process">
-                        <button class="button button-dark" type="submit">Process queued requests</button>
+                        <button class="button button-dark" type="submit">Calculate routes for queued requests</button>
                     </form>
                 </article>
                 <article class="panel queue-summary-panel">
@@ -61,7 +61,13 @@
             </aside>
         </section>
         {{ROUTE_VISUALIZATION}}
-        <footer>Process requests by severity, with arrival order breaking ties.</footer>
+        <section class="panel event-history-panel">
+            <div class="panel-heading">
+                <div><p class="eyebrow">AUDIT TRAIL</p><h2>Applied traffic-event history</h2></div>
+            </div>
+            {{EVENT_HISTORY}}
+        </section>
+        <footer>Review route options, select a route, and advance trips one junction at a time.</footer>
     </main>
 </body>
 </html>

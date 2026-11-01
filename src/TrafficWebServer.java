@@ -35,6 +35,7 @@ public class TrafficWebServer {
     private final SecureRandom random = new SecureRandom();
     private int requestArrivalOrder;
     private int eventArrivalOrder;
+    private List<String> eventHistory = Collections.emptyList();
     private String notice = "";
     private boolean noticeIsError;
     private List<String> noticeDetails = Collections.emptyList();
@@ -89,6 +90,8 @@ public class TrafficWebServer {
             controller.restoreProcessedRoute(route);
         }
         requestArrivalOrder = database.getLargestArrivalOrder();
+        eventArrivalOrder = database.getLargestEventArrivalOrder();
+        eventHistory = database.loadTrafficEventHistory();
     }
 
     private synchronized void handleRequest(HttpExchange exchange) throws IOException {
@@ -175,6 +178,8 @@ public class TrafficWebServer {
             }
             return method.equals("POST")
                     && (path.equals("/routes/process")
+                    || path.equals("/routes/select")
+                    || path.equals("/routes/advance")
                     || path.equals("/events/add")
                     || path.equals("/events/status")
                     || path.equals("/events/process")
@@ -226,6 +231,10 @@ public class TrafficWebServer {
             }
         } else if (path.equals("/routes/process")) {
             processRouteRequests();
+        } else if (path.equals("/routes/select")) {
+            selectRoute(form);
+        } else if (path.equals("/routes/advance")) {
+            advanceTrip(form);
         } else if (path.equals("/vehicles/position")) {
             updateVehiclePosition(form);
         } else if (path.equals("/events/add")) {
@@ -479,9 +488,9 @@ public class TrafficWebServer {
                     .replace("{{JUNCTION_OPTIONS}}",
                             renderJunctionOptions(junctions, vehicle.getCurrentJunction()))
                     .replace("{{VEHICLE_ROUTE_RESULTS}}",
-                            renderProcessedRoutes(
-                                    controller.getProcessedRoutesForVehicle(vehicle.getVehicleId()))
-                                    .replace("Processed journey map", "Your processed routes"));
+                            renderVehicleRequestHistory(vehicle.getVehicleId())
+                                    .replace("Routing requests and trip progress",
+                                            "Your requests and route progress"));
             sendHtml(exchange, 200, page);
         } catch (IOException exception) {
             sendHtml(exchange, 500, "<h1>Could not read web/vehicle_request.html</h1>");
@@ -605,7 +614,9 @@ public class TrafficWebServer {
         synchronized (controller) {
             List<String> results = controller.processRoutingRequests();
             try {
-                database.saveProcessedRoutes(controller.getLastProcessedRoutes());
+                persistTrafficEventHistory();
+                database.saveProcessedRoutes(controller.getProcessedRouteHistory(),
+                        controller.getVehicles());
             } catch (SQLException exception) {
                 reportDatabaseError("save processed routes", exception);
                 return;
@@ -616,6 +627,56 @@ public class TrafficWebServer {
                     : "Routing requests processed by severity, then arrival order.";
             setNotice(message, results, false);
         }
+    }
+
+    private void selectRoute(Map<String, String> form) {
+        int routeChoice;
+        try {
+            routeChoice = Integer.parseInt(form.get("routeChoice"));
+        } catch (NumberFormatException exception) {
+            setNotice("Choose a valid route alternative.",
+                    Collections.emptyList(), true);
+            return;
+        }
+
+        synchronized (controller) {
+            if (!controller.selectRoute(form.get("requestId"), routeChoice)) {
+                setNotice("That route cannot be selected. It may have already started.",
+                        Collections.emptyList(), true);
+                return;
+            }
+            try {
+                database.saveProcessedRoutes(controller.getProcessedRouteHistory(),
+                        controller.getVehicles());
+                setNotice("Route selected. Advance the trip one junction at a time.",
+                        Collections.emptyList(), false);
+            } catch (SQLException exception) {
+                reportDatabaseError("save selected route", exception);
+            }
+        }
+    }
+
+    private void advanceTrip(Map<String, String> form) {
+        synchronized (controller) {
+            String result = controller.advanceTrip(form.get("requestId"));
+            try {
+                persistTrafficEventHistory();
+                database.saveProcessedRoutes(controller.getProcessedRouteHistory(),
+                        controller.getVehicles());
+                boolean isError = result.startsWith("No route")
+                        || result.startsWith("Vehicle not found")
+                        || result.startsWith("This trip")
+                        || result.startsWith("Routing request");
+                setNotice(result, Collections.emptyList(), isError);
+            } catch (SQLException exception) {
+                reportDatabaseError("save trip progress", exception);
+            }
+        }
+    }
+
+    private void persistTrafficEventHistory() throws SQLException {
+        database.saveTrafficEventHistory(controller.getProcessedTrafficEventHistory());
+        eventHistory = database.loadTrafficEventHistory();
     }
 
     private void reportDatabaseError(String action, SQLException exception) {
@@ -726,7 +787,12 @@ public class TrafficWebServer {
             String message = events.isEmpty()
                     ? "No traffic events to process."
                     : events.size() + " traffic event(s) applied in arrival order.";
-            setNotice(message, events, false);
+            try {
+                persistTrafficEventHistory();
+                setNotice(message, events, false);
+            } catch (SQLException exception) {
+                reportDatabaseError("save traffic event history", exception);
+            }
         }
     }
 
@@ -764,6 +830,7 @@ public class TrafficWebServer {
 
             page = page.replace("{{NOTICE}}", renderNotice())
             .replace("{{ROUTE_VISUALIZATION}}", renderProcessedRoutes())
+                    .replace("{{EVENT_HISTORY}}", renderEventHistory())
                     .replace("{{ACCOUNT_SUMMARY}}",
                             escapeHtml(activeSession.account.username) + " · Traffic controller")
                     .replace("{{JUNCTION_COUNT}}", Integer.toString(junctions.size()))
@@ -831,7 +898,7 @@ public class TrafficWebServer {
                     .append("</span><strong>")
                     .append(escapeHtml(request.getRequestId())).append(" · ")
                     .append(escapeHtml(request.getVehicleId()))
-                    .append("</strong></div><p>")
+                    .append("</strong></div><p><strong class=\"request-status status-pending\">PENDING</strong> · ")
                     .append(escapeHtml(request.getSource())).append(" → ")
                     .append(escapeHtml(request.getDestination()))
                     .append("</p><small>")
@@ -843,8 +910,35 @@ public class TrafficWebServer {
         return html.toString();
     }
 
+    private String renderVehicleRequestHistory(String vehicleId) {
+        List<RoutingRequest> pending = controller.getPendingRequests();
+        StringBuilder html = new StringBuilder();
+        for (RoutingRequest request : pending) {
+            if (!request.getVehicleId().equals(vehicleId)) {
+                continue;
+            }
+            if (html.length() == 0) {
+                html.append("<section class=\"processed-routes\"><div class=\"section-heading\">")
+                        .append("<p class=\"eyebrow\">REQUEST STATUS</p><h2>Your requests</h2></div>");
+            }
+            html.append("<article class=\"panel route-result-card\"><strong>")
+                    .append(escapeHtml(request.getRequestId()))
+                    .append(" · ").append(escapeHtml(request.getSeverity().toUpperCase()))
+                    .append("</strong><span class=\"request-status status-pending\">PENDING</span><p>")
+                    .append(escapeHtml(request.getSource())).append(" → ")
+                    .append(escapeHtml(request.getDestination())).append("</p><small>")
+                    .append(escapeHtml(request.getDescription())).append("</small></article>");
+        }
+        String processed = renderProcessedRoutes(
+                controller.getProcessedRoutesForVehicle(vehicleId));
+        if (html.length() == 0) {
+            return processed;
+        }
+        return html.append(processed).append("</section>").toString();
+    }
+
     private String renderProcessedRoutes() {
-        return renderProcessedRoutes(controller.getLastProcessedRoutes());
+        return renderProcessedRoutes(controller.getProcessedRouteHistory());
     }
 
     private String renderProcessedRoutes(List<ProcessedRoute> processedRoutes) {
@@ -854,9 +948,9 @@ public class TrafficWebServer {
 
         StringBuilder html = new StringBuilder(
                 "<section class=\"processed-routes\"><div class=\"section-heading\">"
-                        + "<p class=\"eyebrow\">ROUTE VISUALIZATION</p>"
-                        + "<h2>Processed journey map</h2>"
-                        + "<p class=\"subtitle\">Highlighted arrows show the selected directed route.</p>"
+                        + "<p class=\"eyebrow\">REQUEST HISTORY</p>"
+                        + "<h2>Routing requests and trip progress</h2>"
+                        + "<p class=\"subtitle\">Review request status, route options, and simulated progress.</p>"
                         + "</div>");
         for (ProcessedRoute processed : processedRoutes) {
             RoutingRequest request = processed.getRequest();
@@ -868,7 +962,11 @@ public class TrafficWebServer {
                     .append(" · ").append(escapeHtml(request.getVehicleId()))
                     .append("</h3></div><span class=\"route-arrival\">")
                     .append(escapeHtml(request.getArrivalDetails()))
-                    .append("</span></div>");
+                    .append("</span></div><span class=\"request-status status-")
+                    .append(request.getStatus().toLowerCase(Locale.ROOT).replace('_', '-'))
+                    .append("\">").append(escapeHtml(
+                            request.getStatus().replace('_', ' ')))
+                    .append("</span>");
 
             if (processed.isReachable()) {
                 Route route = processed.getRoute();
@@ -877,7 +975,49 @@ public class TrafficWebServer {
                         .append(escapeHtml(joinJunctions(route.getJunctions())))
                         .append("</strong><span>")
                         .append(route.getTotalTravelTime())
-                        .append(" min travel time</span></p>");
+                        .append(" min travel time · Vehicle at ")
+                        .append(escapeHtml(controller.getVehiclePosition(
+                                request.getVehicleId())))
+                        .append("</span></p>");
+                if (processed.getAlternativeRoute() != null
+                        && ("ROUTE_READY".equals(request.getStatus())
+                        || "ROUTE_SELECTED".equals(request.getStatus())
+                        || "IN_PROGRESS".equals(request.getStatus()))) {
+                    Route alternative = processed.getAlternativeRoute();
+                    html.append("<p class=\"route-alternative\"><strong>Alternative route:</strong> ")
+                            .append(escapeHtml(joinJunctions(alternative.getJunctions())))
+                            .append(" · ").append(alternative.getTotalTravelTime())
+                            .append(" min</p>");
+                }
+                if (activeSession != null
+                        && activeSession.account.role.equals(CONTROLLER)
+                        && "ROUTE_READY".equals(request.getStatus())) {
+                    html.append("<form method=\"post\" action=\"/routes/select\" class=\"trip-control\">")
+                            .append("<input type=\"hidden\" name=\"requestId\" value=\"")
+                            .append(escapeHtml(request.getRequestId())).append("\">")
+                            .append("<label for=\"route-choice-")
+                            .append(escapeHtml(request.getRequestId()))
+                            .append("\">Route to use</label><select name=\"routeChoice\" id=\"route-choice-")
+                            .append(escapeHtml(request.getRequestId())).append("\">")
+                            .append("<option value=\"1\">Fastest · ")
+                            .append(route.getTotalTravelTime()).append(" min</option>");
+                    if (processed.getAlternativeRoute() != null) {
+                        html.append("<option value=\"2\">Alternative · ")
+                                .append(processed.getAlternativeRoute().getTotalTravelTime())
+                                .append(" min</option>");
+                    }
+                    html.append("</select><button class=\"button button-secondary\" type=\"submit\">Select route</button></form>");
+                }
+                if (activeSession != null
+                        && activeSession.account.role.equals(CONTROLLER)
+                        && ("ROUTE_READY".equals(request.getStatus())
+                        || "ROUTE_SELECTED".equals(request.getStatus())
+                        || "IN_PROGRESS".equals(request.getStatus()))) {
+                    html.append("<form method=\"post\" action=\"/routes/advance\" class=\"trip-control\">")
+                            .append("<input type=\"hidden\" name=\"requestId\" value=\"")
+                            .append(escapeHtml(request.getRequestId()))
+                            .append("\"><button class=\"button button-primary\" type=\"submit\">Advance one junction</button></form>");
+                }
             } else {
                 html.append("<div class=\"unreachable-result\">")
                         .append("<span class=\"unreachable-icon\">!</span>")
@@ -890,6 +1030,17 @@ public class TrafficWebServer {
             html.append("</article>");
         }
         return html.append("</section>").toString();
+    }
+
+    private String renderEventHistory() {
+        if (eventHistory.isEmpty()) {
+            return "<p class=\"empty-queue\">No traffic events have been applied yet.</p>";
+        }
+        StringBuilder html = new StringBuilder("<ul class=\"event-history-list\">");
+        for (String event : eventHistory) {
+            html.append("<li>").append(escapeHtml(event)).append("</li>");
+        }
+        return html.append("</ul>").toString();
     }
 
     private String renderRouteSvg(Route route) {
