@@ -26,7 +26,7 @@ VegamTraffic is a small Java traffic-control simulation with a browser dashboard
 5. From the project folder, compile and run the website:
 
    ```powershell
-   javac -d out src\*.java
+   javac -encoding UTF-8 -d out src\*.java
    java -cp "out;lib\*" Main --web
    ```
 
@@ -41,7 +41,7 @@ To run the original menu-driven console program (which does not use the
 database):
 
 ```powershell
-javac -d out src\*.java
+javac -encoding UTF-8 -d out src\*.java
 java -cp out Main
 ```
 
@@ -52,6 +52,8 @@ Passwords are hashed before they are stored. This local classroom demo is not
 production authentication.
 
 Controllers can view and process requests and manage road events.
+They can also manually update an emergency vehicle's simulated position from
+the Vehicles page; the position is saved in MySQL.
 Emergency-vehicle accounts can only submit requests for their assigned vehicle;
 they can choose a starting junction and destination.
 After the controller processes a request, its route map, junction sequence,

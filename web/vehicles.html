@@ -34,11 +34,25 @@
         <section class="panel vehicles-directory">
             <div class="panel-heading">
                 <div><p class="eyebrow">FLEET STATUS</p><h2>Registered units</h2></div>
-                <span class="panel-tag">POSITIONS UPDATE AFTER ROUTING</span>
+                <span class="panel-tag">LIVE SIMULATED POSITIONS</span>
             </div>
             <div class="vehicle-grid">{{VEHICLE_LIST}}</div>
         </section>
-        <footer>Vehicle positions update after their routes are processed.</footer>
+        <section class="panel form-panel">
+            <div class="panel-heading">
+                <div><p class="eyebrow">FLEET MANAGEMENT</p><h2>Manually update a vehicle position</h2></div>
+                <span class="heading-icon">◉</span>
+            </div>
+            <p class="subtitle">Choose a vehicle and set its current simulated junction.</p>
+            <form method="post" action="/vehicles/position">
+                <label for="vehicle-select">Emergency vehicle</label>
+                <select id="vehicle-select" name="vehicleId" required>{{VEHICLE_OPTIONS}}</select>
+                <label for="junction-select">New position</label>
+                <select id="junction-select" name="junction" required>{{JUNCTION_OPTIONS}}</select>
+                <button class="button button-primary" type="submit">Update vehicle position</button>
+            </form>
+        </section>
+        <footer>Vehicle positions update after routing or a controller's manual update.</footer>
     </main>
 </body>
 </html>

@@ -177,7 +177,8 @@ public class TrafficWebServer {
                     && (path.equals("/routes/process")
                     || path.equals("/events/add")
                     || path.equals("/events/status")
-                    || path.equals("/events/process"));
+                    || path.equals("/events/process")
+                    || path.equals("/vehicles/position"));
         }
         return false;
     }
@@ -1099,7 +1100,7 @@ public class TrafficWebServer {
             html.append("<option value=\"").append(escapeHtml(road.getRoadId()))
                     .append("\">").append(escapeHtml(road.getRoadId()))
                     .append(" · ").append(escapeHtml(road.getSource()))
-                    .append(" → ").append(escapeHtml(road.getDestination()))
+                    .append(" &rarr; ").append(escapeHtml(road.getDestination()))
                     .append("</option>");
         }
         return html.toString();
