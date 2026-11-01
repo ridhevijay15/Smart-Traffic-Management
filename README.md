@@ -2,6 +2,24 @@
 
 VegamTraffic is a small Java traffic-control simulation with a browser dashboard. It uses an in-memory, directed road network and sample emergency vehicles. The website uses MySQL to save user accounts, vehicle positions, routing requests, and processed routes.
 
+## Project brief
+
+This project simulates the traffic desk for the fictional city of Vegam. Dispatchers receive emergency routing requests and manually entered road-closure and congestion reports. A request's shortest route is not necessarily its fastest route, and a road update can make a previously usable route unreachable. The system therefore applies traffic events in arrival order before calculating the next route, then finds the fastest reachable route through the currently open roads.
+
+The simulation uses synthetic city data and manually entered updates. It does not connect to live GPS, traffic sensors, traffic lights, or external traffic services. Route priority determines which request is processed first; it does not simulate signal pre-emption, collision avoidance, or real-time vehicle movement.
+
+## Requirements coverage
+
+| Project requirement | Implementation |
+| --- | --- |
+| Use 10–15 junctions, four emergency vehicles, and at least 20 traffic/routing events | The sample network has 10 junctions, 20 directed road segments, and four vehicles. Requests and traffic events can be entered repeatedly through the console or website. |
+| Model directed roads with positive travel times; represent two-way roads as paired edges | The sample network is directed and includes reverse road segments where specified. |
+| Assign Critical, High, or Normal severity and order requests by severity, then arrival | The dispatcher classifies severity from vehicle type and situation; the priority queue uses arrival order to break ties. |
+| Manually enter vehicle positions, destinations, closures, and congestion updates | Available through the controller's Vehicles, Dispatcher, and Roads & Events pages. The console also supports simulation operations. |
+| Apply traffic events FIFO before the next route calculation | Congestion and open/close events are queued and applied before route requests are calculated. |
+| Recalculate from the vehicle's current simulated junction and report unreachable destinations | Routing uses the current vehicle position and open roads. Unreachable requests are reported instead of displaying a route. |
+| Demonstrate closure during travel, equal-severity requests, unreachable routes, and reversed one-way access | Equal-severity ordering, unreachable destinations, and directed-road behavior can be demonstrated. Vehicle movement is simulated as a completed route, not continuous travel, so a closure cannot interrupt a vehicle mid-route; applying a closure before processing demonstrates its effect on the next route calculation. |
+
 ## Connect MySQL and run the website
 
 1. Install MySQL Server and start it.
@@ -110,7 +128,7 @@ controller.addRoutingRequest(request);
 ## Included in this implementation
 
 - Ten junctions, twenty directed road segments (including paired reverse segments), and four sample emergency vehicles.
-- Manual vehicle-position updates and route requests with Critical, High, or Normal severity.
+- Manual vehicle-position updates, destinations, and route requests with Critical, High, or Normal severity.
 - Console and Swing emergency-dispatcher interfaces with situation-based severity classification.
 - A priority queue orders route requests by severity and then arrival order.
 - Congestion, road-close, and road-open updates wait in a FIFO queue and are applied before the next route calculation.
@@ -118,13 +136,35 @@ controller.addRoutingRequest(request);
 - Processed routes are shown as server-rendered SVG maps; no browser scripting is needed.
 - The dashboard displays current road times and closures, vehicle locations, queue sizes, and route results.
 
+## Data structures and algorithms
+
+- A directed, weighted adjacency-list graph represents junctions and road travel times. A road closure excludes that edge from route search without deleting the road.
+- A `PriorityQueue<RoutingRequest>` processes higher-severity requests first and uses arrival order to break ties.
+- An `ArrayDeque<TrafficEvent>` applies congestion and road-status changes in first-in, first-out order.
+- `HashMap` instances provide lookup by vehicle, request, junction, and road identifier.
+- Dijkstra's algorithm uses a Java `PriorityQueue` as a min-heap to find the minimum-travel-time route through open roads.
+
+These structures fit the simulation's needs: graph traversal supports directed routing, queues provide the required processing order, and maps make entity lookup direct. The current routing implementation is `RoadNetwork.findFastestRoute`; it does not use a separate `RoutePlanner` class.
+
+## Deliverables and verification
+
+- **Working Java application and source code:** included in `src`.
+- **Problem analysis, assumptions, and processing rules:** summarized above and in the sections below.
+- **Data-structure and algorithm justification:** summarized above and in Java concepts below.
+- **Sample input and test results:** use the demo steps below as manual scenarios. No automated test suite or recorded test-results document is currently included.
+- **UML class diagram and screenshot-based project report:** not currently included in the repository; add them separately if they are required for submission.
+
+For a manual demonstration, include normal routing, equal-severity requests to show arrival-order tie-breaking, a closure or congestion event applied before route processing, an unreachable destination after closing needed roads, and a one-way route attempt in each direction.
+
 ## Java concepts used
 
 - `EmergencyVehicle`, `RoadSegment`, `RoutingRequest`, `TrafficEvent`, `CongestionEvent`, `ClosureEvent`, `Route`, `RoadNetwork`, and `TrafficController` model the project entities.
 - Encapsulation keeps road times, closure state, vehicle positions, and event processing inside their classes.
 - `CongestionEvent` and `ClosureEvent` inherit from `TrafficEvent` and apply their own network updates.
-- `HashMap` stores the road network and vehicles, `PriorityQueue` orders route requests, and `ArrayDeque` processes traffic events in arrival order.
+- `HashMap` stores vehicles, requests, and roads; `PriorityQueue` orders route requests and supports Dijkstra's min-heap; and `ArrayDeque` processes traffic events in arrival order.
 - Dijkstra's algorithm uses a `PriorityQueue` to search the directed, weighted graph.
+
+**Future enhancements:** add automated tests and recorded test results, create the required UML diagram and project report, and optionally persist road and traffic-event state across server restarts. Continuous travel and mid-route rerouting would require a time-stepped vehicle simulation and are outside the current model.
 
 The website uses plain HTML forms and CSS. The built-in Java HTTP server renders the dashboard and processes form submissions using the same simulation classes as the console application. No JavaScript or third-party web framework is used.
 
