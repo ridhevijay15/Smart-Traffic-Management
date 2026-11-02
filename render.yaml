@@ -10,8 +10,6 @@ services:
       - key: HOST
         value: 0.0.0.0
       - key: VEGAM_DB_URL
-        sync: false
+        value: "jdbc:h2:mem:vegam_traffic;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE"
       - key: VEGAM_DB_USER
-        sync: false
-      - key: VEGAM_DB_PASSWORD
-        sync: false
+        value: sa

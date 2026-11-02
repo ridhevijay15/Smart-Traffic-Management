@@ -196,28 +196,23 @@ java -cp out TrafficWorkflowTest
 
 The application can be deployed from this GitHub repository as a Docker web
 service. GitHub Pages cannot run the Java server or its database-backed forms.
+For a quick demo without a separate database, the Render Blueprint uses an
+in-memory H2 database in MySQL compatibility mode. Accounts, vehicle positions,
+requests, and route history are lost when the service restarts or redeploys.
 
-1. Create a MySQL 8 database with a provider that accepts connections from
-   Render. Create a database named `vegam_traffic`; the application creates
-   its tables on startup.
-2. In Render, create a Blueprint from this repository and use `render.yaml`.
+1. In Render, open the existing Blueprint and sync it with the latest `main`
+   branch, or create a Blueprint from this repository and use `render.yaml`.
    The blueprint builds the app with Java 17 and sets the web server to listen
-   on Render's assigned port and public interface.
-3. Set the Blueprint's `VEGAM_DB_URL`, `VEGAM_DB_USER`, and
-   `VEGAM_DB_PASSWORD` environment variables to the MySQL provider's connection
-   details. Use its TLS-enabled JDBC URL, for example:
+   on Render's assigned port and public interface. The Blueprint configures
+   the temporary database automatically; no external database credentials are
+   required.
+2. Deploy the service and open the `.onrender.com` URL shown in its Render
+   dashboard. Render's free web service may sleep when idle, and its in-memory
+   database resets whenever the service restarts.
 
-   ```text
-   jdbc:mysql://DB_HOST:3306/vegam_traffic?useSSL=true
-   ```
-
-4. Deploy the service and open the `.onrender.com` URL shown in its Render
-   dashboard. Render's free web service may sleep when idle; the MySQL database
-   is separate and may have its own costs and availability requirements.
-
-Never put production database credentials in this repository. Add the deployed
-Render URL to this README or your GitHub repository description after Render
-creates the service.
+For persistent production data, switch to a managed MySQL 8 database and set
+`VEGAM_DB_URL`, `VEGAM_DB_USER`, and `VEGAM_DB_PASSWORD` in Render's environment
+settings. Never commit production database credentials to GitHub.
 
 ## Try a demo
 
