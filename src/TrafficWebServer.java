@@ -54,8 +54,23 @@ public class TrafficWebServer {
             throw new IOException("Could not connect to MySQL. Check db.properties, "
                     + "start MySQL, and create the vegam_traffic database.", exception);
         }
-        HttpServer server = HttpServer.create(
-                new InetSocketAddress("127.0.0.1", 8080), 0);
+        String portSetting = System.getenv("PORT");
+        int port = 8080;
+        if (portSetting != null && !portSetting.trim().isEmpty()) {
+            try {
+                port = Integer.parseInt(portSetting.trim());
+            } catch (NumberFormatException exception) {
+                throw new IOException("PORT must be a valid TCP port.", exception);
+            }
+        }
+        if (port < 1 || port > 65535) {
+            throw new IOException("PORT must be between 1 and 65535.");
+        }
+        String host = System.getenv("HOST");
+        if (host == null || host.trim().isEmpty()) {
+            host = "127.0.0.1";
+        }
+        HttpServer server = HttpServer.create(new InetSocketAddress(host, port), 0);
         TrafficWebServer webServer = new TrafficWebServer(controller, database);
         try {
             webServer.loadDatabaseState();
@@ -64,8 +79,8 @@ public class TrafficWebServer {
         }
         server.createContext("/", webServer::handleRequest);
         server.start();
-        System.out.println("VegamTraffic is running at http://localhost:8080 "
-                + "with MySQL connected.");
+        System.out.println("VegamTraffic is running on " + host + ":" + port
+                + " with MySQL connected.");
     }
 
     private void loadDatabaseState() throws SQLException {
